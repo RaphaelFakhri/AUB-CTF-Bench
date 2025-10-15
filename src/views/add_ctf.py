@@ -14,7 +14,6 @@ def simple_slugify(text):
 def render():
     """Renders a more complete and functional UI for adding a single CTF challenge."""
 
-    # --- Mock Data ---
     mock_categories = ["Web", "Cryptography", "Reverse Engineering", "Pwn", "Forensics", "Misc"]
     mock_tags = ["SQLi", "XSS", "RSA", "AES", "Buffer Overflow", "Heap Exploitation", "Steganography"]
     mock_scorers = ["exact_match", "regex_match", "judge_program", "llm_judge"]
@@ -23,7 +22,6 @@ def render():
 "other"]
     mock_collections = ["None", "Google CTF 2024", "DEF CON CTF 2023", "picoCTF 2023", "(Create New Collection...)"]
 
-    # --- State Initialization ---
     if 'ctf_hints' not in st.session_state:
         st.session_state.ctf_hints = []
     if 'ctf_title_prev' not in st.session_state:
@@ -31,12 +29,10 @@ def render():
     if 'ctf_notes_admin' not in st.session_state:
         st.session_state.ctf_notes_admin = ""
 
-    # --- Layout ---
     st.header("Add CTF Challenge")
 
     col1, col2 = st.columns(2)
 
-    # --- Column 1: Basics ---
     with col1:
         st.subheader("Basics")
 
@@ -53,7 +49,6 @@ def render():
         st.number_input("Points", min_value=0, max_value=100000, value=100, step=50, key="ctf_points", help="Optional. Can be left at 0.")
         st.multiselect("Tags", options=mock_tags, default=[], key="ctf_tags")
 
-    # --- Column 2: Problem & Flag ---
     with col2:
         st.subheader("Problem & Flag")
         st.text_area("Statement (Markdown)", height=220, key="ctf_statement_md", help="The problem description. Markdown is supported.")
@@ -79,7 +74,6 @@ def render():
 
     st.markdown("---")
 
-    # --- Expanders ---
     with st.expander("Hints"):
         for i in range(len(st.session_state.ctf_hints)):
             st.text_input(f"Hint #{i+1} Text", key=f"ctf_hint_text_{i}")
@@ -117,7 +111,6 @@ def render():
         st.text_input("Score weights (JSON)", value='{"flag":1.0}', key="ctf_score_weights_json")
 
     with st.expander("Provenance"):
-        # --- Collection Selection ---
         collection = st.selectbox("Collection", mock_collections, key="ctf_collection", help="Optionally assign this challenge to a collection.")
         if collection == "(Create New Collection...)":
             st.text_input("New Collection Name", key="ctf_new_collection_name", placeholder="e.g., My Custom CTF")
@@ -131,7 +124,6 @@ def render():
     st.markdown("<br>", unsafe_allow_html=True)
 
     if st.button("Save CTF", type="primary", use_container_width=True, key="ctf_save"):
-        # --- Validation Logic ---
         errors = []
         if not st.session_state.ctf_title: errors.append("Title is required.")
         if not st.session_state.ctf_slug: errors.append("Slug is required.")
@@ -154,7 +146,6 @@ def render():
             for error in errors:
                 st.error(error)
         else:
-            # --- Generate Output Payload ---
             final_collection = st.session_state.ctf_new_collection_name if collection == "(Create New Collection...)" else collection
 
             payload = {

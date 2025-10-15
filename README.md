@@ -1,52 +1,74 @@
-# AUB-CTF-Bench (Streamlit Version - Attempt 3)
+# AUB-CTF-Bench: The Vision Gap
 
-## Overview
-AUB-CTF-Bench is a multi-modal LLM benchmarking platform for Capture The Flag (CTF) challenges. This Streamlit implementation provides a complete frontend with mocked backend functionalities, focusing on image uploads for vision analysis, model leaderboards, benchmarks, evaluations, and comparisons. All data is mocked locally for demonstration.
+<div align="center">
+  <img src="assets/logo.png" alt="AUB-CTF-Bench Logo" width="200"/>
+</div>
 
-## Features
-- **Home**: Image upload with mock vision analysis (flag detection, accuracy sim), dynamic metrics (solve rate, token efficiency), quick actions, top models teaser.
-- **Models**: Interactive table with sorting/filtering (provider, category), actions (run CTF, view stats).
-- **Benchmarks**: Filterable card grid (modality, categories), details with Plotly line charts (solve/vision rates) and evaluations table.
-- **Compare**: Select two models, Plotly line chart comparison, summary table with winner.
-- **CTF**: Mock challenges table, analyze buttons with success messages.
-- **About**: Team bios in columns.
-- **Thesis**: Mock PDF preview, download/BibTeX buttons.
-- **UX**: Sidebar navigation, responsive layout, session state for persistence, Plotly for visualizations, PIL for image handling.
+<p align="center">
+  A comprehensive platform for benchmarking Large Language Models (LLMs) on multi-modal Capture The Flag (CTF) challenges.
+</p>
 
-All backend (e.g., API calls, DB) is mocked with local dataframes and random simulations.
+---
 
-## Setup
-1. Navigate to the project: `cd /home/raph/thesis/attempt-3`
-2. Activate virtual environment: `source venv/bin/activate`
-3. Install dependencies: `pip install -r requirements.txt`
+AUB-CTF-Bench is a research-focused web application built with Streamlit to provide a robust environment for evaluating the capabilities of modern AI models in solving complex, multi-modal cybersecurity problems. It features a rich user interface for managing models, creating benchmarks, comparing results, and analyzing performance.
 
-## Run the App
-- Start the Streamlit server: `streamlit run main.py`
-- Open in browser: http://localhost:8501
-- Use sidebar to navigate.
+> **Note on Data:** The data presented in this frontend is for demonstration purposes only and serves to illustrate the vision of the thesis research. The complete and real datasets will be published soon.
 
-## Dependencies
-See `requirements.txt` for full list (streamlit, pandas, plotly, pillow, numpy, requests).
+## 🛠️ Tech Stack
 
-## Testing
-- **Upload**: Home page, drag PNG/JPG → see analysis toast, metrics update.
-- **Models**: Filter by provider/category, select for actions.
-- **Benchmarks**: Filter, click details → view chart/table.
-- **Compare**: Select models → see comparison plot/table.
-- **CTF**: Select challenge → Analyze button.
-- Responsive: Works on mobile/desktop.
-- No errors: Console clean, all interactions mocked.
+- **Frontend**: [Streamlit](https://streamlit.io/)
+- **Data Manipulation**: [Pandas](https://pandas.pydata.org/), [NumPy](https://numpy.org/)
+- **Plotting**: [Plotly](https://plotly.com/python/)
+- **Icons**: [Font Awesome](https://fontawesome.com/)
 
-## Mocking Notes
-- Vision analysis: Random flag/accuracy on upload.
-- Metrics: Update via session_state on interactions.
-- Data: Static DataFrames, no real backend.
-- Charts: Plotly for interactive viz.
+## 🚀 Getting Started
 
-## Future
-- Integrate real backend (Flask/FastAPI).
-- Add auth, real LLM calls (OpenAI API).
-- Docker support.
-- Kali Linux integration for CTF tools.
+Follow these instructions to get a copy of the project up and running on your local machine for development and testing purposes.
 
-For issues: Check terminal for Streamlit logs.
+### Prerequisites
+
+- Python 3.8+
+- `pip` for package management
+
+### Installation
+
+1.  Clone the repository to your local machine:
+    ```bash
+    git clone https://github.com/RaphaelFakhri/AUB-CTF-Bench.git
+    cd AUB-CTF-Bench
+    ```
+
+2.  Create and activate a virtual environment (recommended):
+    ```bash
+    python -m venv venv
+    source venv/bin/activate  # On Windows use `venv\Scripts\activate`
+    ```
+
+3.  Install the required dependencies:
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+### Running the Application
+
+Once the dependencies are installed, you can run the Streamlit application with the following command:
+
+```bash
+streamlit run main.py
+```
+
+The application will be accessible in your web browser at `http://localhost:8501`.
+
+## 📂 Project Structure
+
+```
+.
+├── assets/             # Static assets like logos and images
+├── src/                # Main source code
+│   ├── views/          # UI components for each page/section
+│   ├── data.py         # Mock data generation
+│   └── utils.py        # Utility functions
+├── main.py             # Main Streamlit application entrypoint
+├── requirements.txt    # Project dependencies
+└── README.md           # This file
+```

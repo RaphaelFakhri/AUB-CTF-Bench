@@ -5,21 +5,21 @@ def render(models): # The function signature must match the call in main.py
     st.markdown('<div id="home" class="section-anchor"></div>', unsafe_allow_html=True)
 
     logo = get_image_as_base64("assets/logo.png")
-    # Apply max-width directly to the image using markdown
+
     st.markdown(f"""
-    <div style="text-align: center;margin-top:80px">
+    <div style="text-align: center;margin-top:60px">
         <img src="data:image/png;base64,{logo}" alt="Logo" style="max-width: 12%; height: auto; margin: 0 auto;">
     </div>
     """, unsafe_allow_html=True)
 
-    # Combined Title
+
     st.markdown("""
     <h1 style="text-align: center; font-size: 2rem; font-weight: 700; margin-top: 20px;">
         AUB-CTF-Bench: Bridging the Vision Gap
     </h1>
     """, unsafe_allow_html=True)
 
-    # Subtitle
+
     st.markdown("""
     <p class="home-subtitle">
         Benchmarking Large Language Models on Multi-Modal Capture The Flag Problems
@@ -28,7 +28,6 @@ def render(models): # The function signature must match the call in main.py
 
     st.markdown("---", unsafe_allow_html=True)
 
-    # --- Project Team Section (Academic Paper Style) ---
     st.markdown("""
     <style>
     .home-subtitle {
@@ -72,6 +71,7 @@ def render(models): # The function signature must match the call in main.py
                 <p class="affiliation">Principal Student Researcher</p>
                 <p class="affiliation">Department of Computer Science</p>
                 <p class="affiliation">American University of Beirut</p>
+                <p class="affiliation"><a href="mailto:rjf11@mail.aub.edu">rjf11@mail.aub.edu</a></p>
             </div>
             """, unsafe_allow_html=True)
         with col2:
@@ -81,6 +81,7 @@ def render(models): # The function signature must match the call in main.py
                 <p class="affiliation">Thesis Advisor</p>
                 <p class="affiliation">Department of Computer Science</p>
                 <p class="affiliation">American University of Beirut</p>
+                <p class="affiliation"><a href="mailto:hs33@aub.edu.lb">hs33@aub.edu.lb</a></p>
             </div>
             """, unsafe_allow_html=True)
         with col3:
@@ -90,5 +91,6 @@ def render(models): # The function signature must match the call in main.py
                 <p class="affiliation">Thesis Co-Advisor</p>
                 <p class="affiliation">Department of Electrical & Computer Engineering</p>
                 <p class="affiliation">University of New Haven</p>
+                <p class="affiliation"><a href="mailto:MNassar@newhaven.edu">MNassar@newhaven.edu</a></p>
             </div>
             """, unsafe_allow_html=True)

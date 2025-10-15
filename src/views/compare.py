@@ -2,8 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 
-# --- Mock Data ---
-# Refined mock data with more benchmarks for a richer graph
+
 MODELS_DATA = {
     "GPT-4o": {
         "name": "GPT-4o",
@@ -100,7 +99,6 @@ MODEL_NAMES = list(MODELS_DATA.keys())
 def render(models: pd.DataFrame):
     st.markdown('<div id="compare" class="section-anchor"></div>', unsafe_allow_html=True)
 
-    # --- Custom CSS for Styling (with Dark Mode support) ---
     st.markdown("""
     <style>
         /* Light Mode Styles */
@@ -208,7 +206,7 @@ def render(models: pd.DataFrame):
     with st.container():
         st.markdown('<div class="compare-header"><h3>Compare models</h3><p>Select two models to compare</p></div>', unsafe_allow_html=True)
 
-        # --- Model Selection ---
+
         col1, vs_col, col2 = st.columns([5, 1, 5])
         with col1:
             model1_name = st.selectbox("Model 1", MODEL_NAMES, index=0, key="compare_model1")
@@ -222,11 +220,11 @@ def render(models: pd.DataFrame):
 
         st.write("""<div style="margin-top: 2rem;"></div>""", unsafe_allow_html=True)
 
-        # --- Comparison Body ---
+
         if model1_name and model2_name:
             body_col1, body_col2 = st.columns([6, 6])
 
-            # --- Left Column: Model Details Cards ---
+
             with body_col1:
                 st.markdown("<div class='compare-header'><h5>Model Details</h5></div>", unsafe_allow_html=True)
                 
@@ -257,7 +255,7 @@ def render(models: pd.DataFrame):
                 make_card(model1_data, card_col1)
                 make_card(model2_data, card_col2)
 
-            # --- Right Column: Benchmark Graph ---
+
             with body_col2:
                 st.markdown("<div class='compare-header'><h5>Standard Benchmarks</h5></div>", unsafe_allow_html=True)
                 

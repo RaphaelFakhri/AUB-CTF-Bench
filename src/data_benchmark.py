@@ -1,7 +1,6 @@
 import pandas as pd
 
 def load_benchmarks():
-    """Loads the benchmark data."""
     data = [
         {"Model": "Llama 2 7B", "Benchmark": "HumanEval", "Accuracy @ 20 pass": 0.8},
         {"Model": "Llama 2 7B", "Benchmark": "MMLU", "Accuracy @ 20 pass": 0.75},

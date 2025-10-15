@@ -9,7 +9,7 @@ def render(running_jobs, queued_jobs):
     st.markdown('<div id="view_queue" class="section-anchor"></div>', unsafe_allow_html=True)
     st.header("Job Queue")
 
-    # --- Filters ---
+
     with st.container():
         c1, c2, c3 = st.columns(3)
         with c1:
@@ -21,7 +21,7 @@ def render(running_jobs, queued_jobs):
 
     st.divider()
 
-    # --- System Status and Estimates ---
+
     with st.container():
         col1, col2 = st.columns([1, 1])
         with col1:
@@ -40,9 +40,9 @@ def render(running_jobs, queued_jobs):
 
     st.divider()
 
-    # --- Running Jobs ---
+
     st.subheader("Running Jobs")
-    # Mock data for running jobs with new columns
+
     running_data = {
         'Job ID': ['job-123', 'job-456', 'job-789'],
         'User': ['user-a', 'user-b', 'user-a'],
@@ -57,9 +57,9 @@ def render(running_jobs, queued_jobs):
     running_df = pd.DataFrame(running_data)
     st.dataframe(running_df, use_container_width=True, hide_index=True)
 
-    # --- Queued Jobs ---
+
     st.subheader("Queued Jobs")
-    # Mock data for queued jobs with new columns
+
     queued_data = {
         'Position': [1, 2, 3, 4],
         'User': ['user-c', 'user-d', 'user-e', 'user-f'],

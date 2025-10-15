@@ -7,7 +7,7 @@ def render():
     st.header("Create Benchmark")
     st.caption("Define a benchmark that selects a set of CTFs and owns the environment/tools, evaluation metrics, and limits.")
 
-    # --- 1. Definition ---
+
     with st.expander("1. Definition", expanded=True):
         st.text_input("Name", key="bm_name", placeholder="e.g., AI Safety Hardening Q1")
         st.text_area("Description (Markdown)", key="bm_desc_md", placeholder="A benchmark to test AI model resilience against prompt injection attacks...")
@@ -19,12 +19,12 @@ def render():
         with col2:
             st.multiselect("Domains", ["Web", "Pwn", "Crypto", "Forensics", "Rev", "OSINT", "Stego", "Mobile", "Cloud", "AI", "Misc"], key="bm_domains")
 
-    # --- 2. Dataset ---
+
     with st.expander("2. Dataset"):
         source = st.radio("Source", ["Select existing CTFs", "Upload ZIP of CTFs"], key="bm_dataset_source", horizontal=True)
         
         if source == "Select existing CTFs":
-            # Placeholder for future implementation
+
             st.multiselect("Select CTFs by slug", ["ctf-101", "pwn-pro", "web-warrior"], key="bm_ctf_slugs")
         else:
             st.file_uploader("Upload CTF bundle (.zip)", type=["zip"], key="bm_ctf_zip")
@@ -41,11 +41,11 @@ def render():
             st.selectbox("Dedupe by", ["slug", "attachment_hash"], key="bm_dedupe", help="Ensure no duplicate problems are included.")
             
         st.markdown("**Dataset Preview**")
-        # Mock data for preview
+
         preview_data = {'Category': ['Web', 'Pwn', 'Crypto'], 'Count': [5, 3, 2], 'Total Items': [10, 10, 10]}
         st.dataframe(pd.DataFrame(preview_data), use_container_width=True, hide_index=True)
 
-    # --- 3. Environment & Tools ---
+
     with st.expander("3. Environment & Tools"):
         profile = st.selectbox("Environment profile", ["Headless Kali (Docker)", "Python Tools", "Headless Browser", "Custom"], key="bm_env_profile")
 
@@ -80,7 +80,7 @@ def render():
             st.text_input("Docker image", "ubuntu:24.04", key="bm_env_image_custom")
             st.text_input("Command/entrypoint", "bash -lc", key="bm_env_cmd_custom")
 
-    # --- 4. Evaluation ---
+
     with st.expander("4. Evaluation"):
         judging_method = st.selectbox("Judging", ["automatic", "llm_judge"], key="bm_eval_judging")
         if judging_method == "llm_judge":
@@ -104,7 +104,7 @@ def render():
         l3.number_input("Max tokens (output)", 0, 10_000_000, 0, key="bm_eval_toks_out", help="0 for unlimited")
         l4.number_input("Reruns per task", 1, 10, 1, key="bm_eval_reruns")
 
-    # --- 5. Leaderboard & Reproducibility ---
+
     with st.expander("5. Leaderboard & Reproducibility"):
         st.checkbox("Public leaderboard", value=False, key="bm_lb_public")
         st.checkbox("Anonymize submissions", value=True, key="bm_lb_anon")
@@ -114,10 +114,10 @@ def render():
                       default=["Headless Kali (Docker)"], 
                       key="bm_repro_allowed")
 
-    # --- 6. Actions ---
+
     st.divider()
     if st.button("Create Benchmark", type="primary", key="bm_create", use_container_width=True):
-        # --- Validation Logic ---
+
         errors = []
         if not st.session_state.bm_name:
             errors.append("Benchmark Name is required.")
@@ -135,7 +135,7 @@ def render():
             for error in errors:
                 st.error(f"Validation failed: {error}")
         else:
-            # --- Mock Payload Generation ---
+
             st.success("Benchmark created successfully! (Mock)")
             payload = {
                 "name": st.session_state.bm_name,
@@ -182,7 +182,7 @@ def render():
                 }
             }
             
-            # Add profile specific env details
+
             if st.session_state.bm_env_profile == "Headless Kali (Docker)":
                 payload['environment']['toolpacks'] = st.session_state.bm_env_toolpacks
                 payload['environment']['extra_apt_packages'] = st.session_state.bm_env_apt_extra

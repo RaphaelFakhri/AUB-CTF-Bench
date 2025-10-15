@@ -1,20 +1,20 @@
-# ruff: noqa: F401
+
 import streamlit as st
-# ruff: noqa: F401
+
 import pandas as pd
-# ruff: noqa: F401
+
 import numpy as np
-# ruff: noqa: F401
+
 import plotly.express as px
-# ruff: noqa: F401
+
 import plotly.graph_objects as go
-# ruff: noqa: F401
+
 from plotly.subplots import make_subplots
-# ruff: noqa: F401
+
 import io
-# ruff: noqa: F401
+
 from PIL import Image
-# ruff: noqa: F401
+
 import base64
 import time
 import random
@@ -23,23 +23,23 @@ import streamlit.components.v1 as components
 from src.data import load_mock_data, load_queue_data
 from src.views import home, models as models_view, problems_results, compare, ctf, manage, create_benchmark, view_queue
 
-# --- Page Config and State Initialization ---
-st.set_page_config(page_title="AUB-CTF-Bench", page_icon="🏴", layout="wide")
+
+st.set_page_config(page_title="AUB-CTF-Bench", page_icon="assets/logo-cropped.png", layout="wide")
 
 if "show_modal" not in st.session_state:
     st.session_state.show_modal = None
 
 
-# --- Main Page UI and Navigation Code ---
 
-# This JS block contains the fix for the query parameter issue.
+
 components.html("""
 <script>
-// ROBUST NAVIGATION SYSTEM FOR STREAMLIT - V11 (URL PRESERVE FIX)
+// ROBUST NAVIGATION SYSTEM FOR STREAMLIT - V12 (Hamburger Menu)
 
 // --- CONFIGURATION ---
 const sections = ['home', 'models', 'problems_results', 'compare', 'view_queue', 'manage', 'create_benchmark'];
 const navbarHeight = 80;
+const mobileBreakpoint = 860;
 
 // --- STATE ---
 let currentActiveSection = 'home';
@@ -86,7 +86,6 @@ function scrollToSection(sectionId) {
     anchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
     if (window.parent.history.pushState) {
-        // *** BUG FIX: Preserve query parameters when changing the hash ***
         const newUrl = window.parent.location.pathname + window.parent.location.search + '#' + sectionId;
         window.parent.history.pushState(null, null, newUrl);
     }
@@ -119,9 +118,7 @@ function setupIntersectionObserver() {
     const rootMargin = `-${navbarHeight}px 0px -50% 0px`;
 
     intersectionObserver = new IntersectionObserver((entries) => {
-        if (isScrollingProgrammatically) {
-            return;
-        }
+        if (isScrollingProgrammatically) return;
         let mostVisibleSection = null;
         let maxRatio = 0;
         entries.forEach(entry => {
@@ -146,7 +143,7 @@ function setupIntersectionObserver() {
             elementToObserve.dataset.sectionId = id;
             intersectionObserver.observe(elementToObserve);
         } else {
-            console.warn('NAV | Could not find parent element to observe for section:', id);
+            console.warn('NAV | Could not find parent element for section:', id);
         }
     });
 }
@@ -161,25 +158,49 @@ function setupThemeToggle() {
     }
 }
 
-// --- INITIALIZATION LOGIC (IFRAME-AWARE) ---
+function setupHamburgerMenu() {
+    const hamburger = window.parent.document.querySelector('.hamburger-menu');
+    const navCenter = window.parent.document.querySelector('.navbar-center');
+    if (hamburger && navCenter) {
+        if (hamburger.dataset.listenerAttached) return;
+
+        hamburger.addEventListener('click', (e) => {
+            e.stopPropagation();
+            navCenter.classList.toggle('active');
+        });
+        hamburger.dataset.listenerAttached = 'true';
+
+        window.parent.document.querySelectorAll('.nav-link').forEach(link => {
+            link.addEventListener('click', () => {
+                if (window.parent.innerWidth <= mobileBreakpoint) {
+                    navCenter.classList.remove('active');
+                }
+            });
+        });
+
+        window.parent.document.addEventListener('click', (e) => {
+            if (navCenter.classList.contains('active') && !navCenter.contains(e.target) && !hamburger.contains(e.target)) {
+                navCenter.classList.remove('active');
+            }
+        });
+    }
+}
+
+// --- INITIALIZATION LOGIC ---
 
 function finalInitialization() {
     if (isInitialized) return;
     isInitialized = true;
-
-    if (initObserver) {
-        initObserver.disconnect();
-    }
+    if (initObserver) initObserver.disconnect();
 
     setupClickHandlers();
     setupIntersectionObserver();
     setupThemeToggle();
+    setupHamburgerMenu();
     
     const initialHash = window.parent.location.hash.substring(1);
     if (initialHash && sections.includes(initialHash)) {
-        setTimeout(() => {
-            scrollToSection(initialHash);
-        }, 500);
+        setTimeout(() => scrollToSection(initialHash), 500);
     } else {
         setActiveNav('home');
     }
@@ -187,41 +208,24 @@ function finalInitialization() {
 
 function attemptInitialization() {
     if (isInitialized) return;
-
     const parentDoc = window.parent.document;
-    const navbar = parentDoc.querySelector('.navbar');
-    const navLinks = parentDoc.querySelectorAll('.nav-link');
-    const sectionAnchors = sections.every(id => parentDoc.getElementById(id));
-
-    if (navbar && navLinks.length > 0 && sectionAnchors) {
+    if (sections.every(id => parentDoc.getElementById(id))) {
         finalInitialization();
-    } 
+    }
 }
-
-function setupInitializationObserver() {
-    if (initObserver) initObserver.disconnect();
-
-    initObserver = new MutationObserver(() => {
-        if (!isInitialized) {
-            clearTimeout(window.navReinitTimeout);
-            window.navReinitTimeout = setTimeout(attemptInitialization, 250);
-        }
-    });
-
-    initObserver.observe(window.parent.document.body, {
-        childList: true,
-        subtree: true
-    });
-}
-
-// --- GLOBAL API & STARTUP ---
-window.parent.scrollToSection = scrollToSection;
 
 function onDomReady() {
     if (window.parent.document.readyState === 'loading') {
         window.parent.addEventListener('DOMContentLoaded', onDomReady);
     } else {
-        setupInitializationObserver();
+        if (initObserver) initObserver.disconnect();
+        initObserver = new MutationObserver(() => {
+            if (!isInitialized) {
+                clearTimeout(window.navReinitTimeout);
+                window.navReinitTimeout = setTimeout(attemptInitialization, 250);
+            }
+        });
+        initObserver.observe(window.parent.document.body, { childList: true, subtree: true });
         attemptInitialization();
     }
 }
@@ -251,229 +255,70 @@ st.markdown("""
 
 st.markdown("""
 <style>
-    /* Bulletproof navigation highlighting */
+    /* Global Font */
     * {font-family: 'Roboto', sans-serif !important;}
     
-    /* Override for Material Icons */
-    [data-testid="stIconMaterial"] {
-        font-family: "Material Symbols Rounded" !important;
-    }
-    
-    /* Core navbar styles */
-    body {
-        margin: 0 !important;
-        transition: background-color 0.3s, color 0.3s;
-    }
-    
-    /* Dark mode styles */
-    body.dark-mode {
-        background-color: #121212 !important;
-        color: #ffffff !important;
-    }
-    body.dark-mode .stAppViewContainer,
-    body.dark-mode [data-testid="stAppViewContainer"] {
-        background-color: #121212 !important;
-        color: #ffffff !important;
-    }
-    body.dark-mode .stMarkdown,
-    body.dark-mode .stMarkdown > * {
-        color: #ffffff !important;
-    }
-    body.dark-mode .navbar {
-        background-color: #1e1e1e !important;
-    }
-    body.dark-mode .nav-link {
-        color: #ffffff !important;
-    }
-    body.dark-mode .nav-link:hover {
-        background-color: #333 !important;
-        color: #840132 !important;
-    }
-    body.dark-mode .nav-link.active {
-        background-color: #840132 !important;
-        color: #ffffff !important;
-    }
-    
-    /* Navbar container */
-    .stAppViewContainer {
-        padding-top: 80px !important;
-    }
-    .navbar {
-        position: fixed !important;
-        top: 0 !important;
-        left: 0 !important;
-        right: 0 !important;
-        z-index: 1000 !important;
-        background-color: #ffffff !important;
-        padding: 10px 20px !important;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
-        display: flex !important;
-        justify-content: space-between !important;
-        align-items: center !important;
-        gap: 20px !important;
-        height: 70px !important;
-    }
-    
-    /* Logo section */
-    .navbar-left {
-        display: flex !important;
-        align-items: center !important;
-        height: 100% !important;
-    }
-    .navbar-logo {
-        height: 40px !important;
-        margin-left: 20% !important;
-        width: auto !important;
-        object-fit: contain !important;
-    }
-    .navbar-logo-text {
-        color: #840132 !important;
-        font-weight: bold !important;
-        font-size: 20px !important;
-        margin-left: 10px !important;
-        text-decoration: none !important;
-    }
-    .navbar-left a {
-        display: flex !important;
-        align-items: center !important;
-        text-decoration: none !important;
-        background-color: transparent !important;
-    }
-    
-    /* Navigation center */
-    .navbar-center {
-        display: flex !important;
-        justify-content: center !important;
-        gap: 30px !important;
-        flex: 1 !important;
-    }
-    
-    /* Navigation links - base styles */
-    .nav-link {
-        color: #333 !important;
-        text-decoration: none !important;
-        font-weight: 500 !important;
-        padding: 8px 16px !important;
-        border-radius: 4px !important;
-        transition: all 0.2s !important;
-        position: relative !important;
-        display: inline-block !important;
-        line-height: 1.4 !important;
-        background-color: transparent !important;
-        border: none !important;
-        margin: 0 !important;
-        cursor: pointer !important;
-    }
-    
-    .nav-link:hover {
-        background-color: #f0f0f0 !important;
-        color: #840132 !important;
-    }
-    
-    /* Active state for nav links */
-    .nav-link.active {
-        background-color: #840132 !important;
-        color: #ffffff !important;
-    }
-    
-    /* Dark mode nav links */
-    body.dark-mode .nav-link {
-        color: #ffffff !important;
-    }
-    body.dark-mode .nav-link:hover {
-        background-color: #333 !important;
-        color: #840132 !important;
-    }
-    body.dark-mode .nav-link.active {
-        background-color: #840132 !important;
-        color: #ffffff !important;
-    }
-    
-    /* Right side */
-    .navbar-right {
-        display: flex !important;
-        align-items: center !important;
-        gap: 20px !important;
-    }
-    .github-link {
-        color: #333 !important;
-        text-decoration: none !important;
-        padding: 8px 12px !important;
-        border-radius: 4px !important;
-        transition: all 0.2s !important;
-        display: flex !important;
-        align-items: center !important;
-    }
-    .github-link:hover {
-        background-color: #f0f0f0 !important;
-        color: #840132 !important;
-    }
-    .github-icon {
-        width: 24px !important;
-        height: 24px !important;
-        vertical-align: middle !important;
-        margin-right: 4px !important;
-    }
-    .theme-toggle {
-        background: none !important;
-        border: none !important;
-        font-size: 20px !important;
-        cursor: pointer !important;
-        padding: 8px !important;
-        border-radius: 4px !important;
-        transition: all 0.2s !important;
-        color: #333 !important;
-    }
-    .theme-toggle:hover {
-        background-color: #f0f0f0 !important;
-        color: #840132 !important;
-    }
-    
-    /* Dark mode right side */
-    body.dark-mode .github-link {
-        color: #ffffff !important;
-    }
-    body.dark-mode .github-link:hover {
-        background-color: #333 !important;
-        color: #840132 !important;
-    }
-    body.dark-mode .theme-toggle {
-        color: #ffffff !important;
-    }
-    body.dark-mode .theme-toggle:hover {
-        background-color: #333 !important;
-        color: #840132 !important;
-    }
-    
-    /* Streamlit component fixes */
-    body.dark-mode .stMetric > div > div {
-        color: #ffffff !important;
-    }
-    body.dark-mode .stDataFrame {
-        background-color: #1e1e1e !important;
-    }
-    body.dark-mode .stDataFrame th, 
-    body.dark-mode .stDataFrame td {
-        color: #ffffff !important;
-        border-color: #333 !important;
-    }
-    
-    /* Hide Streamlit header */
-    .stAppHeader.st-emotion-cache-1ffuo7c.e3g0k5y1 {
-        display: none !important;
-    }
-    
-    /* Block container fixes */
-    .block-container {
-        padding-top: 0rem !important;
-        color: inherit !important;
-    }
+    /* Icon Overrides */
+    [data-testid="stIconMaterial"] { font-family: "Material Symbols Rounded" !important; }
+    .notification-banner .fa-triangle-exclamation, .hamburger-menu .fa-bars { font-family: "Font Awesome 6 Free" !important; font-weight: 900 !important; }
 
-    .section-anchor {
-        display: block;
-        position: relative;
-        top: -100px; /* Adjust this value to be slightly more than your navbar height */
-        visibility: hidden;
+    /* Core Body & Dark Mode */
+    body { margin: 0 !important; transition: background-color 0.3s, color 0.3s; }
+    body.dark-mode { background-color: #121212 !important; color: #ffffff !important; }
+    body.dark-mode .stAppViewContainer, body.dark-mode [data-testid="stAppViewContainer"] { background-color: #121212 !important; }
+    body.dark-mode .stMarkdown, body.dark-mode .stMarkdown > * { color: #ffffff !important; }
+    body.dark-mode .navbar { background-color: #1e1e1e !important; }
+    body.dark-mode .nav-link { color: #ffffff !important; }
+    body.dark-mode .nav-link:hover { background-color: #333 !important; color: #840132 !important; }
+    body.dark-mode .nav-link.active { background-color: #840132 !important; color: #ffffff !important; }
+
+    /* Layout Adjustments */
+    .stAppViewContainer { padding-top: 120px !important; }
+    .block-container { padding-top: 0rem !important; color: inherit !important; }
+    .stAppHeader { display: none !important; }
+    .section-anchor { display: block; position: relative; top: -100px; visibility: hidden; }
+
+    /* Navbar */
+    .navbar { position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; z-index: 1000 !important; background-color: #ffffff !important; padding: 10px 20px !important; box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important; display: flex !important; justify-content: space-between !important; align-items: center !important; gap: 20px !important; height: 70px !important; }
+    .navbar-left a { display: flex !important; align-items: center !important; text-decoration: none !important; background-color: transparent !important; }
+    .navbar-logo { height: 40px !important; margin-left: 20% !important; width: auto !important; object-fit: contain !important; }
+    .navbar-logo-text { color: #840132 !important; font-weight: bold !important; font-size: 20px !important; margin-left: 10px !important; text-decoration: none !important; }
+    .navbar-center { display: flex; justify-content: center !important; gap: 30px !important; flex: 1 !important; }
+    .nav-link { color: #333 !important; text-decoration: none !important; font-weight: 500 !important; padding: 8px 16px !important; border-radius: 4px !important; transition: all 0.2s !important; position: relative !important; display: inline-block !important; line-height: 1.4 !important; background-color: transparent !important; border: none !important; margin: 0 !important; cursor: pointer !important; }
+    .nav-link:hover { background-color: #f0f0f0 !important; color: #840132 !important; }
+    .nav-link.active { background-color: #840132 !important; color: #ffffff !important; }
+    .navbar-right { display: flex !important; align-items: center !important; gap: 20px !important; }
+    .github-link { color: #333 !important; text-decoration: none !important; padding: 8px 12px !important; border-radius: 4px !important; transition: all 0.2s !important; display: flex !important; align-items: center !important; }
+    .github-link:hover { background-color: #f0f0f0 !important; color: #840132 !important; }
+    .github-icon { width: 24px !important; height: 24px !important; vertical-align: middle !important; margin-right: 4px !important; }
+    .theme-toggle { background: none !important; border: none !important; font-size: 20px !important; cursor: pointer !important; padding: 8px !important; border-radius: 4px !important; transition: all 0.2s !important; color: #333 !important; }
+    .theme-toggle:hover { background-color: #f0f0f0 !important; color: #840132 !important; }
+    
+    /* Dark Mode Right Side */
+    body.dark-mode .github-link, body.dark-mode .theme-toggle { color: #ffffff !important; }
+    body.dark-mode .github-link:hover, body.dark-mode .theme-toggle:hover { background-color: #333 !important; color: #840132 !important; }
+
+    /* Notification Banner */
+    .notification-banner { position: fixed; top: 70px; left: 0; right: 0; background-color: #fffbe6; color: #5c3c00; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 8px 20px; z-index: 999; font-size: 14px; border-bottom: 1px solid #fff1c2; }
+    .notification-banner p { margin: 0; }
+    body.dark-mode .notification-banner { background-color: #4d3800; color: #fffbe6; border-bottom: 1px solid #664d00; }
+
+    /* Hamburger Menu */
+    .hamburger-menu { display: none; background: none; border: none; font-size: 22px; cursor: pointer; padding: 8px; border-radius: 4px; color: #333; transition: all 0.2s; }
+    .hamburger-menu:hover { background-color: #f0f0f0; color: #840132; }
+    body.dark-mode .hamburger-menu { color: #ffffff; }
+    body.dark-mode .hamburger-menu:hover { background-color: #333; }
+
+    /* Responsive (Mobile) */
+    @media (max-width: 860px) {
+        .navbar-center { display: none !important; position: absolute; top: 70px; left: 0; right: 0; background-color: #ffffff; flex-direction: column; width: 100%; box-shadow: 0 8px 16px rgba(0,0,0,0.1); border-top: 1px solid #f0f0f0; z-index: 999; }
+        body.dark-mode .navbar-center { background-color: #1e1e1e; border-top: 1px solid #333; }
+        .navbar-center.active { display: flex !important; }
+        .navbar-center .nav-link { padding: 15px 20px; text-align: center; border-radius: 0; border-bottom: 1px solid #f0f0f0; }
+        body.dark-mode .navbar-center .nav-link { border-bottom: 1px solid #333; }
+        .navbar-center .nav-link:last-child { border-bottom: none; }
+        .hamburger-menu { display: block; }
+        .navbar-right { gap: 5px; }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -493,19 +338,24 @@ st.markdown(f"""
         <a href="#compare" class="nav-link">Compare</a>
     </div>
     <div class="navbar-right">
-        <a href="https://github.com" class="github-link" target="_blank" title="GitHub">
+        <a href="https://github.com/RaphaelFakhri/AUB-CTF-Bench" class="github-link" target="_blank" title="GitHub">
             <img src="data:image/svg+xml;base64,{github_base64}" alt="GitHub" class="github-icon">
         </a>
-        <button class="theme-toggle" onclick="toggleTheme()" title="Toggle Theme">🌙</button>
+        <button class="theme-toggle" title="Toggle Theme">🌙</button>
+        <button class="hamburger-menu" title="Menu"><i class="fa-solid fa-bars"></i></button>
     </div>
+</div>
+<div class="notification-banner">
+    <i class="fa-solid fa-triangle-exclamation"></i>
+    <p><b>Research Preview:</b> All data shown is for demonstration purposes only. Do not rely on these results until official publication.</p>
 </div>
 """, unsafe_allow_html=True)
 
-# --- Data Loading ---
+
 models, benchmarks, environments, runs = load_mock_data()
 running_jobs, queued_jobs = load_queue_data()
 
-# --- Main Page Section Rendering ---
+
 home.render(models)
 models_view.render(models, benchmarks, runs)
 problems_results.render(benchmarks, runs)
@@ -515,7 +365,7 @@ create_benchmark.render()
 view_queue.render(running_jobs, queued_jobs)
 
 
-# --- Floating Action Buttons (FABs) ---
+
 st.markdown("""
 <style>
     .fab-container-final { position: fixed; bottom: 30px; right: 30px; z-index: 1002; display: flex; flex-direction: column; gap: 15px; align-items: flex-end; }
@@ -540,5 +390,5 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# --- Footer ---
+
 st.markdown("&copy; 2025 AUB-CTF-Bench | Multi-modal benchmarking by Raphael Fakhri et al.")
