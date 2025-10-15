@@ -1,0 +1,2296 @@
+./README.md
+---
+# AUB-CTF-Bench (Streamlit Version - Attempt 3)
+
+## Overview
+AUB-CTF-Bench is a multi-modal LLM benchmarking platform for Capture The Flag (CTF) challenges. This Streamlit implementation provides a complete frontend with mocked backend functionalities, focusing on image uploads for vision analysis, model leaderboards, benchmarks, evaluations, and comparisons. All data is mocked locally for demonstration.
+
+## Features
+- **Home**: Image upload with mock vision analysis (flag detection, accuracy sim), dynamic metrics (solve rate, token efficiency), quick actions, top models teaser.
+- **Models**: Interactive table with sorting/filtering (provider, category), actions (run CTF, view stats).
+- **Benchmarks**: Filterable card grid (modality, categories), details with Plotly line charts (solve/vision rates) and evaluations table.
+- **Compare**: Select two models, Plotly line chart comparison, summary table with winner.
+- **CTF**: Mock challenges table, analyze buttons with success messages.
+- **About**: Team bios in columns.
+- **Thesis**: Mock PDF preview, download/BibTeX buttons.
+- **UX**: Sidebar navigation, responsive layout, session state for persistence, Plotly for visualizations, PIL for image handling.
+
+All backend (e.g., API calls, DB) is mocked with local dataframes and random simulations.
+
+## Setup
+1. Navigate to the project: `cd /home/raph/thesis/attempt-3`
+2. Activate virtual environment: `source venv/bin/activate`
+3. Install dependencies: `pip install -r requirements.txt`
+
+## Run the App
+- Start the Streamlit server: `streamlit run main.py`
+- Open in browser: http://localhost:8501
+- Use sidebar to navigate.
+
+## Dependencies
+See `requirements.txt` for full list (streamlit, pandas, plotly, pillow, numpy, requests).
+
+## Testing
+- **Upload**: Home page, drag PNG/JPG → see analysis toast, metrics update.
+- **Models**: Filter by provider/category, select for actions.
+- **Benchmarks**: Filter, click details → view chart/table.
+- **Compare**: Select models → see comparison plot/table.
+- **CTF**: Select challenge → Analyze button.
+- Responsive: Works on mobile/desktop.
+- No errors: Console clean, all interactions mocked.
+
+## Mocking Notes
+- Vision analysis: Random flag/accuracy on upload.
+- Metrics: Update via session_state on interactions.
+- Data: Static DataFrames, no real backend.
+- Charts: Plotly for interactive viz.
+
+## Future
+- Integrate real backend (Flask/FastAPI).
+- Add auth, real LLM calls (OpenAI API).
+- Docker support.
+- Kali Linux integration for CTF tools.
+
+For issues: Check terminal for Streamlit logs.
+
+
+---
+./main.py
+---
+# ruff: noqa: F401
+import streamlit as st
+# ruff: noqa: F401
+import pandas as pd
+# ruff: noqa: F401
+import numpy as np
+# ruff: noqa: F401
+import plotly.express as px
+# ruff: noqa: F401
+import plotly.graph_objects as go
+# ruff: noqa: F401
+from plotly.subplots import make_subplots
+# ruff: noqa: F401
+import io
+# ruff: noqa: F401
+from PIL import Image
+# ruff: noqa: F401
+import base64
+import time
+import random
+import streamlit.components.v1 as components
+
+from src.data import load_mock_data, load_queue_data
+from src.views import home, models as models_view, problems_results, compare, ctf, manage, docs
+
+# --- Page Config and State Initialization ---
+st.set_page_config(page_title="AUB-CTF-Bench", page_icon="🏴", layout="wide")
+
+if "show_modal" not in st.session_state:
+    st.session_state.show_modal = None
+
+
+# --- Main Page UI and Navigation Code ---
+
+# This JS block contains the fix for the query parameter issue.
+components.html("""
+<script>
+// ROBUST NAVIGATION SYSTEM FOR STREAMLIT - V11 (URL PRESERVE FIX)
+
+// --- CONFIGURATION ---
+const sections = ['home', 'models', 'problems_results', 'compare', 'ctf', 'manage', 'docs', 'view_queue', 'create_benchmark', 'add_ctf'];
+const navbarHeight = 80;
+
+// --- STATE ---
+let currentActiveSection = 'home';
+let scrollContainer = null;
+let intersectionObserver = null;
+let isInitialized = false;
+let initObserver = null;
+let isScrollingProgrammatically = false;
+let scrollTimeout = null;
+
+// --- CORE, IFRAME-AWARE FUNCTIONS ---
+
+function findScrollContainer() {
+    const parentDoc = window.parent.document;
+    const candidate = parentDoc.querySelector('[data-testid="stAppViewContainer"]');
+    if (candidate && candidate.scrollHeight > candidate.clientHeight) {
+        return candidate;
+    }
+    return window.parent;
+}
+
+function setActiveNav(sectionId) {
+    if (!sectionId || currentActiveSection === sectionId) {
+        return;
+    }
+    currentActiveSection = sectionId;
+    window.parent.document.querySelectorAll('.nav-link').forEach(link => {
+        const href = link.getAttribute('href');
+        const linkSectionId = href ? href.substring(1) : '';
+        link.classList.toggle('active', linkSectionId === sectionId);
+    });
+}
+
+function scrollToSection(sectionId) {
+    const anchor = window.parent.document.getElementById(sectionId);
+    if (!anchor) {
+        console.error('NAV | Could not find anchor for section:', sectionId);
+        return;
+    }
+
+    isScrollingProgrammatically = true;
+    setActiveNav(sectionId);
+
+    anchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    if (window.parent.history.pushState) {
+        // *** BUG FIX: Preserve query parameters when changing the hash ***
+        const newUrl = window.parent.location.pathname + window.parent.location.search + '#' + sectionId;
+        window.parent.history.pushState(null, null, newUrl);
+    }
+
+    clearTimeout(scrollTimeout);
+    scrollTimeout = setTimeout(() => {
+        isScrollingProgrammatically = false;
+    }, 1000);
+}
+
+// --- SETUP FUNCTIONS (IFRAME-AWARE) ---
+
+function setupClickHandlers() {
+    window.parent.document.querySelectorAll('.nav-link').forEach(link => {
+        const newLink = link.cloneNode(true);
+        link.parentNode.replaceChild(newLink, link);
+        newLink.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const sectionId = newLink.getAttribute('href').substring(1);
+            scrollToSection(sectionId);
+        });
+    });
+}
+
+function setupIntersectionObserver() {
+    if (intersectionObserver) intersectionObserver.disconnect();
+
+    scrollContainer = findScrollContainer();
+    const rootMargin = `-${navbarHeight}px 0px -50% 0px`;
+
+    intersectionObserver = new IntersectionObserver((entries) => {
+        if (isScrollingProgrammatically) {
+            return;
+        }
+        let mostVisibleSection = null;
+        let maxRatio = 0;
+        entries.forEach(entry => {
+            if (entry.isIntersecting && entry.intersectionRatio > maxRatio) {
+                mostVisibleSection = entry.target.dataset.sectionId;
+                maxRatio = entry.intersectionRatio;
+            }
+        });
+        if (mostVisibleSection) {
+            setActiveNav(mostVisibleSection);
+        }
+    }, {
+        root: scrollContainer === window.parent ? null : scrollContainer,
+        rootMargin: rootMargin,
+        threshold: 0.1
+    });
+
+    sections.forEach(id => {
+        const anchor = window.parent.document.getElementById(id);
+        if (anchor && anchor.parentElement) {
+            const elementToObserve = anchor.parentElement;
+            elementToObserve.dataset.sectionId = id;
+            intersectionObserver.observe(elementToObserve);
+        } else {
+            console.warn('NAV | Could not find parent element to observe for section:', id);
+        }
+    });
+}
+
+function setupThemeToggle() {
+    const toggleBtn = window.parent.document.querySelector('.theme-toggle');
+    if (toggleBtn && !toggleBtn.dataset.listenerAttached) {
+        toggleBtn.addEventListener('click', () => {
+            window.parent.document.body.classList.toggle('dark-mode');
+        });
+        toggleBtn.dataset.listenerAttached = 'true';
+    }
+}
+
+// --- INITIALIZATION LOGIC (IFRAME-AWARE) ---
+
+function finalInitialization() {
+    if (isInitialized) return;
+    isInitialized = true;
+
+    if (initObserver) {
+        initObserver.disconnect();
+    }
+
+    setupClickHandlers();
+    setupIntersectionObserver();
+    setupThemeToggle();
+    
+    const initialHash = window.parent.location.hash.substring(1);
+    if (initialHash && sections.includes(initialHash)) {
+        setTimeout(() => {
+            scrollToSection(initialHash);
+        }, 500);
+    } else {
+        setActiveNav('home');
+    }
+}
+
+function attemptInitialization() {
+    if (isInitialized) return;
+
+    const parentDoc = window.parent.document;
+    const navbar = parentDoc.querySelector('.navbar');
+    const navLinks = parentDoc.querySelectorAll('.nav-link');
+    const sectionAnchors = sections.every(id => parentDoc.getElementById(id));
+
+    if (navbar && navLinks.length > 0 && sectionAnchors) {
+        finalInitialization();
+    } 
+}
+
+function setupInitializationObserver() {
+    if (initObserver) initObserver.disconnect();
+
+    initObserver = new MutationObserver(() => {
+        if (!isInitialized) {
+            clearTimeout(window.navReinitTimeout);
+            window.navReinitTimeout = setTimeout(attemptInitialization, 250);
+        }
+    });
+
+    initObserver.observe(window.parent.document.body, {
+        childList: true,
+        subtree: true
+    });
+}
+
+// --- GLOBAL API & STARTUP ---
+window.parent.scrollToSection = scrollToSection;
+
+function onDomReady() {
+    if (window.parent.document.readyState === 'loading') {
+        window.parent.addEventListener('DOMContentLoaded', onDomReady);
+    } else {
+        setupInitializationObserver();
+        attemptInitialization();
+    }
+}
+
+onDomReady();
+
+</script>
+""", height=0)
+
+def get_image_as_base64(path):
+    with open(path, "rb") as f:
+        data = f.read()
+    return base64.b64encode(data).decode()
+
+logo_base64 = get_image_as_base64("assets/logo-cropped.png")
+github_base64 = get_image_as_base64("assets/github-mark.svg")  
+
+st.markdown("""
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+""", unsafe_allow_html=True)
+
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+<style>
+    /* Bulletproof navigation highlighting */
+    * {font-family: 'Roboto', sans-serif !important;}
+    
+    /* Override for Material Icons */
+    [data-testid="stIconMaterial"] {
+        font-family: "Material Symbols Rounded" !important;
+    }
+    
+    /* Core navbar styles */
+    body {
+        margin: 0 !important;
+        transition: background-color 0.3s, color 0.3s;
+    }
+    
+    /* Dark mode styles */
+    body.dark-mode {
+        background-color: #121212 !important;
+        color: #ffffff !important;
+    }
+    body.dark-mode .stAppViewContainer,
+    body.dark-mode [data-testid="stAppViewContainer"] {
+        background-color: #121212 !important;
+        color: #ffffff !important;
+    }
+    body.dark-mode .stMarkdown,
+    body.dark-mode .stMarkdown > * {
+        color: #ffffff !important;
+    }
+    body.dark-mode .navbar {
+        background-color: #1e1e1e !important;
+    }
+    body.dark-mode .nav-link {
+        color: #ffffff !important;
+    }
+    body.dark-mode .nav-link:hover {
+        background-color: #333 !important;
+        color: #840132 !important;
+    }
+    body.dark-mode .nav-link.active {
+        background-color: #840132 !important;
+        color: #ffffff !important;
+    }
+    
+    /* Navbar container */
+    .stAppViewContainer {
+        padding-top: 80px !important;
+    }
+    .navbar {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        z-index: 1000 !important;
+        background-color: #ffffff !important;
+        padding: 10px 20px !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        gap: 20px !important;
+        height: 70px !important;
+    }
+    
+    /* Logo section */
+    .navbar-left {
+        display: flex !important;
+        align-items: center !important;
+        height: 100% !important;
+    }
+    .navbar-logo {
+        height: 40px !important;
+        margin-left: 20% !important;
+        width: auto !important;
+        object-fit: contain !important;
+    }
+    .navbar-logo-text {
+        color: #840132 !important;
+        font-weight: bold !important;
+        font-size: 20px !important;
+        margin-left: 10px !important;
+        text-decoration: none !important;
+    }
+    .navbar-left a {
+        display: flex !important;
+        align-items: center !important;
+        text-decoration: none !important;
+        background-color: transparent !important;
+    }
+    
+    /* Navigation center */
+    .navbar-center {
+        display: flex !important;
+        justify-content: center !important;
+        gap: 30px !important;
+        flex: 1 !important;
+    }
+    
+    /* Navigation links - base styles */
+    .nav-link {
+        color: #333 !important;
+        text-decoration: none !important;
+        font-weight: 500 !important;
+        padding: 8px 16px !important;
+        border-radius: 4px !important;
+        transition: all 0.2s !important;
+        position: relative !important;
+        display: inline-block !important;
+        line-height: 1.4 !important;
+        background-color: transparent !important;
+        border: none !important;
+        margin: 0 !important;
+        cursor: pointer !important;
+    }
+    
+    .nav-link:hover {
+        background-color: #f0f0f0 !important;
+        color: #840132 !important;
+    }
+    
+    /* Active state for nav links */
+    .nav-link.active {
+        background-color: #840132 !important;
+        color: #ffffff !important;
+    }
+    
+    /* Dark mode nav links */
+    body.dark-mode .nav-link {
+        color: #ffffff !important;
+    }
+    body.dark-mode .nav-link:hover {
+        background-color: #333 !important;
+        color: #840132 !important;
+    }
+    body.dark-mode .nav-link.active {
+        background-color: #840132 !important;
+        color: #ffffff !important;
+    }
+    
+    /* Right side */
+    .navbar-right {
+        display: flex !important;
+        align-items: center !important;
+        gap: 20px !important;
+    }
+    .github-link {
+        color: #333 !important;
+        text-decoration: none !important;
+        padding: 8px 12px !important;
+        border-radius: 4px !important;
+        transition: all 0.2s !important;
+        display: flex !important;
+        align-items: center !important;
+    }
+    .github-link:hover {
+        background-color: #f0f0f0 !important;
+        color: #840132 !important;
+    }
+    .github-icon {
+        width: 24px !important;
+        height: 24px !important;
+        vertical-align: middle !important;
+        margin-right: 4px !important;
+    }
+    .theme-toggle {
+        background: none !important;
+        border: none !important;
+        font-size: 20px !important;
+        cursor: pointer !important;
+        padding: 8px !important;
+        border-radius: 4px !important;
+        transition: all 0.2s !important;
+        color: #333 !important;
+    }
+    .theme-toggle:hover {
+        background-color: #f0f0f0 !important;
+        color: #840132 !important;
+    }
+    
+    /* Dark mode right side */
+    body.dark-mode .github-link {
+        color: #ffffff !important;
+    }
+    body.dark-mode .github-link:hover {
+        background-color: #333 !important;
+        color: #840132 !important;
+    }
+    body.dark-mode .theme-toggle {
+        color: #ffffff !important;
+    }
+    body.dark-mode .theme-toggle:hover {
+        background-color: #333 !important;
+        color: #840132 !important;
+    }
+    
+    /* Streamlit component fixes */
+    body.dark-mode .stMetric > div > div {
+        color: #ffffff !important;
+    }
+    body.dark-mode .stDataFrame {
+        background-color: #1e1e1e !important;
+    }
+    body.dark-mode .stDataFrame th, 
+    body.dark-mode .stDataFrame td {
+        color: #ffffff !important;
+        border-color: #333 !important;
+    }
+    
+    /* Hide Streamlit header */
+    .stAppHeader.st-emotion-cache-1ffuo7c.e3g0k5y1 {
+        display: none !important;
+    }
+    
+    /* Block container fixes */
+    .block-container {
+        padding-top: 0rem !important;
+        color: inherit !important;
+    }
+
+    .section-anchor {
+        display: block;
+        position: relative;
+        top: -100px; /* Adjust this value to be slightly more than your navbar height */
+        visibility: hidden;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown(f"""
+<div class="navbar">
+    <div class="navbar-left">
+        <a href="#home">
+            <img src="data:image/png;base64,{logo_base64}" alt="Logo" class="navbar-logo">
+            <span class="navbar-logo-text">aubctf.com</span>
+        </a>
+    </div>
+    <div class="navbar-center">
+        <a href="#home" class="nav-link">Home</a>
+        <a href="#models" class="nav-link">Models</a>
+        <a href="#problems_results" class="nav-link">Problems & Results</a>
+        <a href="#compare" class="nav-link">Compare</a>
+        <a href="#ctf" class="nav-link">CTF</a>
+        <a href="#manage" class="nav-link">Manage</a>
+        <a href="#docs" class="nav-link">Docs</a>
+    </div>
+    <div class="navbar-right">
+        <a href="https://github.com" class="github-link" target="_blank" title="GitHub">
+            <img src="data:image/svg+xml;base64,{github_base64}" alt="GitHub" class="github-icon">
+        </a>
+        <button class="theme-toggle" onclick="toggleTheme()" title="Toggle Theme">🌙</button>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+# --- Data Loading ---
+models, benchmarks, environments, runs = load_mock_data()
+running_jobs, queued_jobs = load_queue_data()
+
+# --- Main Page Section Rendering ---
+home.render(models)
+models_view.render(models, benchmarks, runs)
+problems_results.render(benchmarks, runs)
+compare.render(models)
+ctf.render(benchmarks, models, environments)
+manage.render(environments)
+docs.render()
+
+# --- Floating Action Buttons (FABs) ---
+st.markdown("""
+<style>
+    .fab-container-final { position: fixed; bottom: 30px; right: 30px; z-index: 1002; display: flex; flex-direction: column; gap: 15px; align-items: flex-end; }
+    .fab-final { width: auto; height: 56px; padding: 0 20px; background-color: #840132; border-radius: 30px; display: flex; align-items: center; justify-content: center; color: white; text-decoration: none; box-shadow: 0 4px 8px rgba(0,0,0,0.2); transition: all 0.3s ease; flex-basis: content; }
+    .fab-final:hover { background-color: #6a0128; box-shadow: 0 6px 12px rgba(0,0,0,0.3); transform: translateY(-2px); }
+    .fab-final svg { width: 24px; height: 24px; margin-right: 12px; }
+    .fab-final span { font-weight: 500; }
+</style>
+<div class="fab-container-final">
+    <a href="#add_ctf" class="fab-final nav-link" title="Add CTF">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <span>Add CTF</span>
+    </a>
+    <a href="#create_benchmark" class="fab-final nav-link" title="Create Benchmark">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        <span>Create Benchmark</span>
+    </a>
+    <a href="#view_queue" class="fab-final nav-link" title="View Queue">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 2v6l-4 4 4 4v6H7v-6l4-4-4-4V2h10z"/></svg>
+        <span>View Queue</span>
+    </a>
+</div>
+""", unsafe_allow_html=True)
+
+# --- New Sections for FABs (Reordered) ---
+
+st.markdown('<div id="add_ctf" class="section-anchor"></div>', unsafe_allow_html=True)
+with st.container():
+    st.header("Add CTF (Bulk)")
+    st.text_area("Paste your CTF data here (e.g., in JSON or CSV format)", height=300, key="bulk_add_ctf_area")
+    st.button("Submit CTFs", type="primary", key="bulk_add_ctf_submit")
+
+st.markdown("---<br><br>", unsafe_allow_html=True)
+
+st.markdown('<div id="create_benchmark" class="section-anchor"></div>', unsafe_allow_html=True)
+with st.container():
+    st.header("Create a new Benchmark")
+    st.subheader("Benchmark Definition")
+    st.text_input("Benchmark Name", placeholder="e.g., 'Code Generation for Python')", key="new_benchmark_name")
+    st.text_area("Description", placeholder="A short description of what this benchmark evaluates.", key="new_benchmark_desc")
+
+    st.subheader("Benchmark Source")
+    source_type = st.radio("Choose a source type:", ["From Scratch", "From Web URL", "From Document"], horizontal=True, key="new_benchmark_source_type")
+
+    if source_type == "From Scratch":
+        st.info("Please define questions and answers manually below.")
+        st.text_area("Questions (one per line)", key="new_benchmark_questions")
+        st.text_area("Answers (one per line, corresponding to questions)", key="new_benchmark_answers")
+    elif source_type == "From Web URL":
+        st.text_input("URL", placeholder="https://example.com/article", key="new_benchmark_url")
+        st.button("Generate from URL", key="new_benchmark_generate_url")
+    elif source_type == "From Document":
+        st.file_uploader("Upload a document (PDF, TXT, MD)", type=["pdf", "txt", "md"], key="new_benchmark_uploader")
+    
+    st.subheader("Evaluation Method")
+    eval_method = st.radio("", ["Automatic (Exact Match, F1, etc.)", "AI-Assisted (LLM-as-a-judge)"], key="new_benchmark_eval_method")
+    if eval_method == "AI-Assisted (LLM-as-a-judge)":
+        st.text_area("Grading Rubric", placeholder="Define the criteria for the AI to judge the responses. E.g., 'Is the code correct? Is it efficient? Is it well-commented?'.", key="new_benchmark_rubric")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("Create Benchmark", use_container_width=True, type="primary", key="new_benchmark_submit"):
+        st.toast("Benchmark creation initiated!")
+
+st.markdown("---<br><br>", unsafe_allow_html=True)
+
+st.markdown('<div id="view_queue" class="section-anchor"></div>', unsafe_allow_html=True)
+with st.container():
+    st.header("Job Queue")
+    st.subheader("System Status")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("GPU Utilization", "78%", "-2%")
+    col2.metric("CPU Utilization", "54%", "+5%")
+    col3.metric("Active Jobs", "3")
+
+    st.subheader("Estimated Wait Time")
+    st.info("Your job would be **#2** in the queue. Estimated start in **~5 minutes**.")
+
+    st.subheader("Running Jobs")
+    st.dataframe(running_jobs, use_container_width=True, hide_index=True)
+
+    st.subheader("Queued Jobs")
+    st.dataframe(queued_jobs, use_container_width=True, hide_index=True)
+
+
+
+
+
+# --- Footer ---
+st.markdown("&copy; 2025 AUB-CTF-Bench | Multi-modal benchmarking by Raphael Fakhri et al.")
+
+---
+./requirements.txt
+---
+streamlit==1.50.0
+pillow==11.3.0
+plotly==6.3.1
+pandas==2.3.3
+numpy==2.3.3
+requests==2.32.5
+
+
+---
+./tmp.txt
+---
+./README.md
+---
+# AUB-CTF-Bench (Streamlit Version - Attempt 3)
+
+## Overview
+AUB-CTF-Bench is a multi-modal LLM benchmarking platform for Capture The Flag (CTF) challenges. This Streamlit implementation provides a complete frontend with mocked backend functionalities, focusing on image uploads for vision analysis, model leaderboards, benchmarks, evaluations, and comparisons. All data is mocked locally for demonstration.
+
+## Features
+- **Home**: Image upload with mock vision analysis (flag detection, accuracy sim), dynamic metrics (solve rate, token efficiency), quick actions, top models teaser.
+- **Models**: Interactive table with sorting/filtering (provider, category), actions (run CTF, view stats).
+- **Benchmarks**: Filterable card grid (modality, categories), details with Plotly line charts (solve/vision rates) and evaluations table.
+- **Compare**: Select two models, Plotly line chart comparison, summary table with winner.
+- **CTF**: Mock challenges table, analyze buttons with success messages.
+- **About**: Team bios in columns.
+- **Thesis**: Mock PDF preview, download/BibTeX buttons.
+- **UX**: Sidebar navigation, responsive layout, session state for persistence, Plotly for visualizations, PIL for image handling.
+
+All backend (e.g., API calls, DB) is mocked with local dataframes and random simulations.
+
+## Setup
+1. Navigate to the project: `cd /home/raph/thesis/attempt-3`
+2. Activate virtual environment: `source venv/bin/activate`
+3. Install dependencies: `pip install -r requirements.txt`
+
+## Run the App
+- Start the Streamlit server: `streamlit run main.py`
+- Open in browser: http://localhost:8501
+- Use sidebar to navigate.
+
+## Dependencies
+See `requirements.txt` for full list (streamlit, pandas, plotly, pillow, numpy, requests).
+
+## Testing
+- **Upload**: Home page, drag PNG/JPG → see analysis toast, metrics update.
+- **Models**: Filter by provider/category, select for actions.
+- **Benchmarks**: Filter, click details → view chart/table.
+- **Compare**: Select models → see comparison plot/table.
+- **CTF**: Select challenge → Analyze button.
+- Responsive: Works on mobile/desktop.
+- No errors: Console clean, all interactions mocked.
+
+## Mocking Notes
+- Vision analysis: Random flag/accuracy on upload.
+- Metrics: Update via session_state on interactions.
+- Data: Static DataFrames, no real backend.
+- Charts: Plotly for interactive viz.
+
+## Future
+- Integrate real backend (Flask/FastAPI).
+- Add auth, real LLM calls (OpenAI API).
+- Docker support.
+- Kali Linux integration for CTF tools.
+
+For issues: Check terminal for Streamlit logs.
+
+
+---
+./main.py
+---
+# ruff: noqa: F401
+import streamlit as st
+# ruff: noqa: F401
+import pandas as pd
+# ruff: noqa: F401
+import numpy as np
+# ruff: noqa: F401
+import plotly.express as px
+# ruff: noqa: F401
+import plotly.graph_objects as go
+# ruff: noqa: F401
+from plotly.subplots import make_subplots
+# ruff: noqa: F401
+import io
+# ruff: noqa: F401
+from PIL import Image
+# ruff: noqa: F401
+import base64
+import time
+import random
+import streamlit.components.v1 as components
+
+from src.data import load_mock_data, load_queue_data
+from src.views import home, models as models_view, problems_results, compare, ctf, manage, docs
+
+# --- Page Config and State Initialization ---
+st.set_page_config(page_title="AUB-CTF-Bench", page_icon="🏴", layout="wide")
+
+if "show_modal" not in st.session_state:
+    st.session_state.show_modal = None
+
+
+# --- Main Page UI and Navigation Code ---
+
+# This JS block contains the fix for the query parameter issue.
+components.html("""
+<script>
+// ROBUST NAVIGATION SYSTEM FOR STREAMLIT - V11 (URL PRESERVE FIX)
+
+// --- CONFIGURATION ---
+const sections = ['home', 'models', 'problems_results', 'compare', 'ctf', 'manage', 'docs', 'view_queue', 'create_benchmark', 'add_ctf'];
+const navbarHeight = 80;
+
+// --- STATE ---
+let currentActiveSection = 'home';
+let scrollContainer = null;
+let intersectionObserver = null;
+let isInitialized = false;
+let initObserver = null;
+let isScrollingProgrammatically = false;
+let scrollTimeout = null;
+
+// --- CORE, IFRAME-AWARE FUNCTIONS ---
+
+function findScrollContainer() {
+    const parentDoc = window.parent.document;
+    const candidate = parentDoc.querySelector('[data-testid="stAppViewContainer"]');
+    if (candidate && candidate.scrollHeight > candidate.clientHeight) {
+        return candidate;
+    }
+    return window.parent;
+}
+
+function setActiveNav(sectionId) {
+    if (!sectionId || currentActiveSection === sectionId) {
+        return;
+    }
+    currentActiveSection = sectionId;
+    window.parent.document.querySelectorAll('.nav-link').forEach(link => {
+        const href = link.getAttribute('href');
+        const linkSectionId = href ? href.substring(1) : '';
+        link.classList.toggle('active', linkSectionId === sectionId);
+    });
+}
+
+function scrollToSection(sectionId) {
+    const anchor = window.parent.document.getElementById(sectionId);
+    if (!anchor) {
+        console.error('NAV | Could not find anchor for section:', sectionId);
+        return;
+    }
+
+    isScrollingProgrammatically = true;
+    setActiveNav(sectionId);
+
+    anchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    if (window.parent.history.pushState) {
+        // *** BUG FIX: Preserve query parameters when changing the hash ***
+        const newUrl = window.parent.location.pathname + window.parent.location.search + '#' + sectionId;
+        window.parent.history.pushState(null, null, newUrl);
+    }
+
+    clearTimeout(scrollTimeout);
+    scrollTimeout = setTimeout(() => {
+        isScrollingProgrammatically = false;
+    }, 1000);
+}
+
+// --- SETUP FUNCTIONS (IFRAME-AWARE) ---
+
+function setupClickHandlers() {
+    window.parent.document.querySelectorAll('.nav-link').forEach(link => {
+        const newLink = link.cloneNode(true);
+        link.parentNode.replaceChild(newLink, link);
+        newLink.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const sectionId = newLink.getAttribute('href').substring(1);
+            scrollToSection(sectionId);
+        });
+    });
+}
+
+function setupIntersectionObserver() {
+    if (intersectionObserver) intersectionObserver.disconnect();
+
+    scrollContainer = findScrollContainer();
+    const rootMargin = `-${navbarHeight}px 0px -50% 0px`;
+
+    intersectionObserver = new IntersectionObserver((entries) => {
+        if (isScrollingProgrammatically) {
+            return;
+        }
+        let mostVisibleSection = null;
+        let maxRatio = 0;
+        entries.forEach(entry => {
+            if (entry.isIntersecting && entry.intersectionRatio > maxRatio) {
+                mostVisibleSection = entry.target.dataset.sectionId;
+                maxRatio = entry.intersectionRatio;
+            }
+        });
+        if (mostVisibleSection) {
+            setActiveNav(mostVisibleSection);
+        }
+    }, {
+        root: scrollContainer === window.parent ? null : scrollContainer,
+        rootMargin: rootMargin,
+        threshold: 0.1
+    });
+
+    sections.forEach(id => {
+        const anchor = window.parent.document.getElementById(id);
+        if (anchor && anchor.parentElement) {
+            const elementToObserve = anchor.parentElement;
+            elementToObserve.dataset.sectionId = id;
+            intersectionObserver.observe(elementToObserve);
+        } else {
+            console.warn('NAV | Could not find parent element to observe for section:', id);
+        }
+    });
+}
+
+function setupThemeToggle() {
+    const toggleBtn = window.parent.document.querySelector('.theme-toggle');
+    if (toggleBtn && !toggleBtn.dataset.listenerAttached) {
+        toggleBtn.addEventListener('click', () => {
+            window.parent.document.body.classList.toggle('dark-mode');
+        });
+        toggleBtn.dataset.listenerAttached = 'true';
+    }
+}
+
+// --- INITIALIZATION LOGIC (IFRAME-AWARE) ---
+
+function finalInitialization() {
+    if (isInitialized) return;
+    isInitialized = true;
+
+    if (initObserver) {
+        initObserver.disconnect();
+    }
+
+    setupClickHandlers();
+    setupIntersectionObserver();
+    setupThemeToggle();
+    
+    const initialHash = window.parent.location.hash.substring(1);
+    if (initialHash && sections.includes(initialHash)) {
+        setTimeout(() => {
+            scrollToSection(initialHash);
+        }, 500);
+    } else {
+        setActiveNav('home');
+    }
+}
+
+function attemptInitialization() {
+    if (isInitialized) return;
+
+    const parentDoc = window.parent.document;
+    const navbar = parentDoc.querySelector('.navbar');
+    const navLinks = parentDoc.querySelectorAll('.nav-link');
+    const sectionAnchors = sections.every(id => parentDoc.getElementById(id));
+
+    if (navbar && navLinks.length > 0 && sectionAnchors) {
+        finalInitialization();
+    } 
+}
+
+function setupInitializationObserver() {
+    if (initObserver) initObserver.disconnect();
+
+    initObserver = new MutationObserver(() => {
+        if (!isInitialized) {
+            clearTimeout(window.navReinitTimeout);
+            window.navReinitTimeout = setTimeout(attemptInitialization, 250);
+        }
+    });
+
+    initObserver.observe(window.parent.document.body, {
+        childList: true,
+        subtree: true
+    });
+}
+
+// --- GLOBAL API & STARTUP ---
+window.parent.scrollToSection = scrollToSection;
+
+function onDomReady() {
+    if (window.parent.document.readyState === 'loading') {
+        window.parent.addEventListener('DOMContentLoaded', onDomReady);
+    } else {
+        setupInitializationObserver();
+        attemptInitialization();
+    }
+}
+
+onDomReady();
+
+</script>
+""", height=0)
+
+def get_image_as_base64(path):
+    with open(path, "rb") as f:
+        data = f.read()
+    return base64.b64encode(data).decode()
+
+logo_base64 = get_image_as_base64("assets/logo-cropped.png")
+github_base64 = get_image_as_base64("assets/github-mark.svg")  
+
+st.markdown("""
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+""", unsafe_allow_html=True)
+
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+<style>
+    /* Bulletproof navigation highlighting */
+    * {font-family: 'Roboto', sans-serif !important;}
+    
+    /* Override for Material Icons */
+    [data-testid="stIconMaterial"] {
+        font-family: "Material Symbols Rounded" !important;
+    }
+    
+    /* Core navbar styles */
+    body {
+        margin: 0 !important;
+        transition: background-color 0.3s, color 0.3s;
+    }
+    
+    /* Dark mode styles */
+    body.dark-mode {
+        background-color: #121212 !important;
+        color: #ffffff !important;
+    }
+    body.dark-mode .stAppViewContainer,
+    body.dark-mode [data-testid="stAppViewContainer"] {
+        background-color: #121212 !important;
+        color: #ffffff !important;
+    }
+    body.dark-mode .stMarkdown,
+    body.dark-mode .stMarkdown > * {
+        color: #ffffff !important;
+    }
+    body.dark-mode .navbar {
+        background-color: #1e1e1e !important;
+    }
+    body.dark-mode .nav-link {
+        color: #ffffff !important;
+    }
+    body.dark-mode .nav-link:hover {
+        background-color: #333 !important;
+        color: #840132 !important;
+    }
+    body.dark-mode .nav-link.active {
+        background-color: #840132 !important;
+        color: #ffffff !important;
+    }
+    
+    /* Navbar container */
+    .stAppViewContainer {
+        padding-top: 80px !important;
+    }
+    .navbar {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        z-index: 1000 !important;
+        background-color: #ffffff !important;
+        padding: 10px 20px !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        gap: 20px !important;
+        height: 70px !important;
+    }
+    
+    /* Logo section */
+    .navbar-left {
+        display: flex !important;
+        align-items: center !important;
+        height: 100% !important;
+    }
+    .navbar-logo {
+        height: 40px !important;
+        margin-left: 20% !important;
+        width: auto !important;
+        object-fit: contain !important;
+    }
+    .navbar-logo-text {
+        color: #840132 !important;
+        font-weight: bold !important;
+        font-size: 20px !important;
+        margin-left: 10px !important;
+        text-decoration: none !important;
+    }
+    .navbar-left a {
+        display: flex !important;
+        align-items: center !important;
+        text-decoration: none !important;
+        background-color: transparent !important;
+    }
+    
+    /* Navigation center */
+    .navbar-center {
+        display: flex !important;
+        justify-content: center !important;
+        gap: 30px !important;
+        flex: 1 !important;
+    }
+    
+    /* Navigation links - base styles */
+    .nav-link {
+        color: #333 !important;
+        text-decoration: none !important;
+        font-weight: 500 !important;
+        padding: 8px 16px !important;
+        border-radius: 4px !important;
+        transition: all 0.2s !important;
+        position: relative !important;
+        display: inline-block !important;
+        line-height: 1.4 !important;
+        background-color: transparent !important;
+        border: none !important;
+        margin: 0 !important;
+        cursor: pointer !important;
+    }
+    
+    .nav-link:hover {
+        background-color: #f0f0f0 !important;
+        color: #840132 !important;
+    }
+    
+    /* Active state for nav links */
+    .nav-link.active {
+        background-color: #840132 !important;
+        color: #ffffff !important;
+    }
+    
+    /* Dark mode nav links */
+    body.dark-mode .nav-link {
+        color: #ffffff !important;
+    }
+    body.dark-mode .nav-link:hover {
+        background-color: #333 !important;
+        color: #840132 !important;
+    }
+    body.dark-mode .nav-link.active {
+        background-color: #840132 !important;
+        color: #ffffff !important;
+    }
+    
+    /* Right side */
+    .navbar-right {
+        display: flex !important;
+        align-items: center !important;
+        gap: 20px !important;
+    }
+    .github-link {
+        color: #333 !important;
+        text-decoration: none !important;
+        padding: 8px 12px !important;
+        border-radius: 4px !important;
+        transition: all 0.2s !important;
+        display: flex !important;
+        align-items: center !important;
+    }
+    .github-link:hover {
+        background-color: #f0f0f0 !important;
+        color: #840132 !important;
+    }
+    .github-icon {
+        width: 24px !important;
+        height: 24px !important;
+        vertical-align: middle !important;
+        margin-right: 4px !important;
+    }
+    .theme-toggle {
+        background: none !important;
+        border: none !important;
+        font-size: 20px !important;
+        cursor: pointer !important;
+        padding: 8px !important;
+        border-radius: 4px !important;
+        transition: all 0.2s !important;
+        color: #333 !important;
+    }
+    .theme-toggle:hover {
+        background-color: #f0f0f0 !important;
+        color: #840132 !important;
+    }
+    
+    /* Dark mode right side */
+    body.dark-mode .github-link {
+        color: #ffffff !important;
+    }
+    body.dark-mode .github-link:hover {
+        background-color: #333 !important;
+        color: #840132 !important;
+    }
+    body.dark-mode .theme-toggle {
+        color: #ffffff !important;
+    }
+    body.dark-mode .theme-toggle:hover {
+        background-color: #333 !important;
+        color: #840132 !important;
+    }
+    
+    /* Streamlit component fixes */
+    body.dark-mode .stMetric > div > div {
+        color: #ffffff !important;
+    }
+    body.dark-mode .stDataFrame {
+        background-color: #1e1e1e !important;
+    }
+    body.dark-mode .stDataFrame th, 
+    body.dark-mode .stDataFrame td {
+        color: #ffffff !important;
+        border-color: #333 !important;
+    }
+    
+    /* Hide Streamlit header */
+    .stAppHeader.st-emotion-cache-1ffuo7c.e3g0k5y1 {
+        display: none !important;
+    }
+    
+    /* Block container fixes */
+    .block-container {
+        padding-top: 0rem !important;
+        color: inherit !important;
+    }
+
+    .section-anchor {
+        display: block;
+        position: relative;
+        top: -100px; /* Adjust this value to be slightly more than your navbar height */
+        visibility: hidden;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown(f"""
+<div class="navbar">
+    <div class="navbar-left">
+        <a href="#home">
+            <img src="data:image/png;base64,{logo_base64}" alt="Logo" class="navbar-logo">
+            <span class="navbar-logo-text">aubctf.com</span>
+        </a>
+    </div>
+    <div class="navbar-center">
+        <a href="#home" class="nav-link">Home</a>
+        <a href="#models" class="nav-link">Models</a>
+        <a href="#problems_results" class="nav-link">Problems & Results</a>
+        <a href="#compare" class="nav-link">Compare</a>
+        <a href="#ctf" class="nav-link">CTF</a>
+        <a href="#manage" class="nav-link">Manage</a>
+        <a href="#docs" class="nav-link">Docs</a>
+    </div>
+    <div class="navbar-right">
+        <a href="https://github.com" class="github-link" target="_blank" title="GitHub">
+            <img src="data:image/svg+xml;base64,{github_base64}" alt="GitHub" class="github-icon">
+        </a>
+        <button class="theme-toggle" onclick="toggleTheme()" title="Toggle Theme">🌙</button>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+# --- Data Loading ---
+models, benchmarks, environments, runs = load_mock_data()
+running_jobs, queued_jobs = load_queue_data()
+
+# --- Main Page Section Rendering ---
+home.render(models)
+models_view.render(models, benchmarks, runs)
+problems_results.render(benchmarks, runs)
+compare.render(models)
+ctf.render(benchmarks, models, environments)
+manage.render(environments)
+docs.render()
+
+# --- Floating Action Buttons (FABs) ---
+st.markdown("""
+<style>
+    .fab-container-final { position: fixed; bottom: 30px; right: 30px; z-index: 1002; display: flex; flex-direction: column; gap: 15px; align-items: flex-end; }
+    .fab-final { width: auto; height: 56px; padding: 0 20px; background-color: #840132; border-radius: 30px; display: flex; align-items: center; justify-content: center; color: white; text-decoration: none; box-shadow: 0 4px 8px rgba(0,0,0,0.2); transition: all 0.3s ease; flex-basis: content; }
+    .fab-final:hover { background-color: #6a0128; box-shadow: 0 6px 12px rgba(0,0,0,0.3); transform: translateY(-2px); }
+    .fab-final svg { width: 24px; height: 24px; margin-right: 12px; }
+    .fab-final span { font-weight: 500; }
+</style>
+<div class="fab-container-final">
+    <a href="#add_ctf" class="fab-final nav-link" title="Add CTF">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <span>Add CTF</span>
+    </a>
+    <a href="#create_benchmark" class="fab-final nav-link" title="Create Benchmark">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        <span>Create Benchmark</span>
+    </a>
+    <a href="#view_queue" class="fab-final nav-link" title="View Queue">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 2v6l-4 4 4 4v6H7v-6l4-4-4-4V2h10z"/></svg>
+        <span>View Queue</span>
+    </a>
+</div>
+""", unsafe_allow_html=True)
+
+# --- New Sections for FABs (Reordered) ---
+
+st.markdown('<div id="add_ctf" class="section-anchor"></div>', unsafe_allow_html=True)
+with st.container():
+    st.header("Add CTF (Bulk)")
+    st.text_area("Paste your CTF data here (e.g., in JSON or CSV format)", height=300, key="bulk_add_ctf_area")
+    st.button("Submit CTFs", type="primary", key="bulk_add_ctf_submit")
+
+st.markdown("---<br><br>", unsafe_allow_html=True)
+
+st.markdown('<div id="create_benchmark" class="section-anchor"></div>', unsafe_allow_html=True)
+with st.container():
+    st.header("Create a new Benchmark")
+    st.subheader("Benchmark Definition")
+    st.text_input("Benchmark Name", placeholder="e.g., 'Code Generation for Python')", key="new_benchmark_name")
+    st.text_area("Description", placeholder="A short description of what this benchmark evaluates.", key="new_benchmark_desc")
+
+    st.subheader("Benchmark Source")
+    source_type = st.radio("Choose a source type:", ["From Scratch", "From Web URL", "From Document"], horizontal=True, key="new_benchmark_source_type")
+
+    if source_type == "From Scratch":
+        st.info("Please define questions and answers manually below.")
+        st.text_area("Questions (one per line)", key="new_benchmark_questions")
+        st.text_area("Answers (one per line, corresponding to questions)", key="new_benchmark_answers")
+    elif source_type == "From Web URL":
+        st.text_input("URL", placeholder="https://example.com/article", key="new_benchmark_url")
+        st.button("Generate from URL", key="new_benchmark_generate_url")
+    elif source_type == "From Document":
+        st.file_uploader("Upload a document (PDF, TXT, MD)", type=["pdf", "txt", "md"], key="new_benchmark_uploader")
+    
+    st.subheader("Evaluation Method")
+    eval_method = st.radio("", ["Automatic (Exact Match, F1, etc.)", "AI-Assisted (LLM-as-a-judge)"], key="new_benchmark_eval_method")
+    if eval_method == "AI-Assisted (LLM-as-a-judge)":
+        st.text_area("Grading Rubric", placeholder="Define the criteria for the AI to judge the responses. E.g., 'Is the code correct? Is it efficient? Is it well-commented?'.", key="new_benchmark_rubric")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("Create Benchmark", use_container_width=True, type="primary", key="new_benchmark_submit"):
+        st.toast("Benchmark creation initiated!")
+
+st.markdown("---<br><br>", unsafe_allow_html=True)
+
+st.markdown('<div id="view_queue" class="section-anchor"></div>', unsafe_allow_html=True)
+with st.container():
+    st.header("Job Queue")
+    st.subheader("System Status")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("GPU Utilization", "78%", "-2%")
+    col2.metric("CPU Utilization", "54%", "+5%")
+    col3.metric("Active Jobs", "3")
+
+    st.subheader("Estimated Wait Time")
+    st.info("Your job would be **#2** in the queue. Estimated start in **~5 minutes**.")
+
+    st.subheader("Running Jobs")
+    st.dataframe(running_jobs, use_container_width=True, hide_index=True)
+
+    st.subheader("Queued Jobs")
+    st.dataframe(queued_jobs, use_container_width=True, hide_index=True)
+
+
+
+
+
+# --- Footer ---
+st.markdown("&copy; 2025 AUB-CTF-Bench | Multi-modal benchmarking by Raphael Fakhri et al.")
+
+---
+./assets/github-mark.svg
+---
+<svg width="98" height="96" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M48.854 0C21.839 0 0 22 0 49.217c0 21.756 13.993 40.172 33.405 46.69 2.427.49 3.316-1.059 3.316-2.362 0-1.141-.08-5.052-.08-9.127-13.59 2.934-16.42-5.867-16.42-5.867-2.184-5.704-5.42-7.17-5.42-7.17-4.448-3.015.324-3.015.324-3.015 4.934.326 7.523 5.052 7.523 5.052 4.367 7.496 11.404 5.378 14.235 4.074.404-3.178 1.699-5.378 3.074-6.6-10.839-1.141-22.243-5.378-22.243-24.283 0-5.378 1.94-9.778 5.014-13.2-.485-1.222-2.184-6.275.486-13.038 0 0 4.125-1.304 13.426 5.052a46.97 46.97 0 0 1 12.214-1.63c4.125 0 8.33.571 12.213 1.63 9.302-6.356 13.427-5.052 13.427-5.052 2.67 6.763.97 11.816.485 13.038 3.155 3.422 5.015 7.822 5.015 13.2 0 18.905-11.404 23.06-22.324 24.283 1.78 1.548 3.316 4.481 3.316 9.126 0 6.6-.08 11.897-.08 13.526 0 1.304.89 2.853 3.316 2.364 19.412-6.52 33.405-24.935 33.405-46.691C97.707 22 75.788 0 48.854 0z" fill="#24292f"/></svg>
+
+---
+./assets/logo.png:Zone.Identifier
+---
+[ZoneTransfer]
+ZoneId=3
+ReferrerUrl=https://www.iloveimg.com/
+HostUrl=https://api6.iloveimg.com/v1/download/AqvgA149y0p4bq9gdz840dfnjh2f048lgbrn99r74jyAjynj4tgyy4whlp3c3km1mcvttzcc6fd33flfh1vpqhA7hhz9btfjAhh08rrbgh2x64pyl364xds6rst9yx89dh0yf5cxpjdjm62hfdv79pqjq9qgyA53s106q40A36cw2Ah95bv1
+
+
+---
+./assets/orgs/anthropic.svg
+---
+<?xml version="1.0" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 20010904//EN"
+ "http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd">
+<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
+ width="1040.000000pt" height="1040.000000pt" viewBox="0 0 1040.000000 1040.000000"
+ preserveAspectRatio="xMidYMid meet">
+<metadata>
+Created by potrace 1.14, written by Peter Selinger 2001-2017
+</metadata>
+<g transform="translate(0.000000,1040.000000) scale(0.100000,-0.100000)"
+fill="#000000" stroke="none">
+<path d="M2865 8788 c-21 -51 -38 -98 -39 -104 -1 -7 -7 -18 -13 -25 -5 -8
+-14 -27 -18 -44 -10 -37 -10 -35 -22 -65 -41 -98 -63 -155 -63 -167 0 -7 -3
+-13 -8 -13 -4 0 -16 -27 -26 -60 -11 -33 -22 -60 -26 -60 -4 0 -7 -6 -7 -12 0
+-12 -142 -378 -163 -423 -5 -11 -43 -105 -84 -210 -144 -371 -208 -530 -222
+-559 -8 -16 -14 -33 -14 -38 0 -5 -10 -30 -21 -56 -12 -25 -22 -51 -24 -57 -2
+-10 -6 -21 -38 -97 -8 -20 -13 -38 -11 -41 3 -2 -2 -10 -11 -17 -8 -7 -15 -21
+-15 -31 0 -11 -4 -27 -9 -37 -20 -35 -61 -135 -61 -146 0 -6 -6 -22 -13 -36
+-7 -14 -24 -54 -37 -90 -13 -36 -30 -76 -37 -90 -7 -14 -13 -30 -13 -36 0 -5
+-9 -29 -20 -52 -11 -22 -20 -47 -20 -55 0 -7 -5 -18 -11 -24 -6 -6 -12 -17
+-13 -24 -2 -8 -7 -23 -11 -34 -4 -11 -73 -184 -152 -385 -79 -201 -164 -414
+-189 -475 -25 -60 -47 -117 -49 -125 -1 -8 -10 -31 -18 -50 -40 -90 -87 -213
+-87 -226 0 -8 -4 -14 -10 -14 -5 0 -10 -9 -10 -19 0 -11 -5 -23 -10 -26 -6 -4
+-8 -11 -4 -16 3 -5 1 -15 -4 -22 -5 -7 -41 -93 -80 -192 -39 -99 -77 -193 -83
+-210 -7 -16 -13 -32 -14 -35 -1 -3 -5 -14 -10 -25 -48 -116 -135 -342 -135
+-352 0 -7 -5 -13 -12 -13 -6 0 -8 -3 -5 -7 4 -3 3 -11 -2 -17 -5 -6 -14 -29
+-21 -51 -7 -22 -20 -56 -28 -75 -9 -19 -16 -37 -17 -40 -1 -3 -5 -14 -10 -25
+-4 -11 -44 -110 -87 -220 -43 -110 -82 -209 -87 -220 -5 -11 -19 -47 -31 -80
+-13 -33 -29 -73 -36 -90 -18 -42 -58 -149 -59 -157 0 -4 -6 -13 -12 -19 -7 -7
+-13 -21 -13 -31 0 -10 -4 -26 -10 -36 -5 -9 -53 -127 -106 -262 -53 -135 -100
+-254 -105 -265 -4 -11 -27 -67 -49 -125 -23 -58 -47 -118 -54 -135 -8 -16 -22
+-52 -31 -80 -10 -27 -23 -56 -28 -62 -5 -7 -6 -13 -3 -13 4 0 0 -12 -8 -27 -8
+-16 -31 -71 -51 -123 -21 -52 -46 -116 -56 -142 l-19 -48 813 0 812 0 35 93
+c19 50 35 94 35 97 1 3 9 22 18 44 9 21 17 41 17 43 0 5 44 119 64 168 7 17
+30 75 51 130 21 55 43 114 50 130 6 17 18 46 25 65 6 19 16 44 21 55 11 26
+139 357 143 370 2 6 8 24 15 40 6 17 19 50 28 75 9 25 21 51 26 58 5 6 7 12 4
+12 -3 0 10 35 28 78 l34 77 1517 0 1517 0 74 -190 c40 -104 76 -197 79 -205 3
+-8 19 -51 36 -95 16 -44 34 -89 39 -100 4 -11 31 -81 59 -155 28 -74 57 -151
+65 -170 25 -60 38 -95 39 -102 1 -3 4 -10 9 -14 4 -4 7 -14 7 -21 0 -8 11 -39
+25 -69 14 -30 25 -58 25 -62 0 -8 68 -185 95 -247 7 -16 18 -47 25 -67 l12
+-38 810 0 810 0 -6 26 c-4 14 -15 45 -25 68 -10 22 -42 102 -71 176 -29 74
+-58 149 -65 165 -7 17 -43 107 -79 200 -37 94 -70 179 -75 190 -5 11 -13 31
+-19 45 -6 14 -56 142 -112 285 -56 143 -106 269 -111 280 -4 11 -18 45 -29 75
+-12 30 -28 70 -37 89 -8 18 -16 39 -18 45 -1 6 -10 29 -19 50 -10 22 -19 48
+-21 58 -2 10 -7 24 -12 31 -4 6 -8 14 -9 17 0 3 -4 14 -9 25 -4 11 -18 45 -30
+75 -12 30 -26 64 -30 75 -5 11 -9 22 -10 25 -1 3 -5 14 -10 25 -67 166 -135
+342 -135 352 0 7 -4 13 -8 13 -5 0 -9 6 -9 13 -1 12 -50 141 -79 204 -8 17
+-14 33 -14 36 0 2 -6 20 -14 38 -8 19 -14 36 -14 39 -1 3 -15 39 -32 80 -42
+102 -48 116 -61 143 -5 13 -11 29 -13 37 -2 8 -8 26 -13 40 -6 14 -36 90 -68
+170 -31 80 -60 154 -65 165 -23 51 -65 157 -92 229 -16 44 -35 94 -43 111 -8
+16 -27 64 -43 105 -16 41 -33 84 -37 95 -5 11 -9 22 -10 25 -6 16 -18 48 -26
+65 -4 11 -22 56 -39 100 -17 44 -35 90 -40 103 -14 31 -24 56 -58 142 -16 41
+-33 84 -37 95 -5 11 -9 22 -10 25 -1 3 -7 18 -13 33 -7 16 -12 34 -12 41 0 6
+-4 16 -8 22 -5 5 -15 25 -22 44 -7 19 -20 51 -28 70 -8 19 -18 44 -22 55 -5
+11 -50 126 -100 255 -108 276 -102 262 -129 322 -12 26 -21 52 -21 58 0 6 -4
+18 -9 28 -15 29 -29 63 -61 147 -17 44 -35 90 -40 103 -6 12 -14 32 -19 45
+-17 43 -40 103 -85 218 -26 64 -46 121 -46 127 0 6 -3 12 -7 14 -5 2 -16 24
+-25 51 -10 26 -26 68 -35 95 -10 26 -22 50 -28 54 -5 4 -7 8 -3 8 4 0 -5 28
+-18 63 -23 58 -30 75 -54 130 -5 12 -44 110 -85 217 -42 107 -82 209 -89 225
+-7 17 -51 126 -97 243 l-83 212 -832 0 -832 0 -37 -92z m910 -1869 c4 -13 13
+-37 20 -54 7 -16 35 -88 63 -160 27 -71 53 -139 57 -150 5 -11 9 -22 10 -25 9
+-26 47 -125 58 -150 6 -14 11 -27 12 -30 1 -3 5 -12 8 -20 3 -8 29 -76 57
+-150 28 -74 57 -148 64 -165 8 -16 19 -48 26 -70 7 -22 16 -44 20 -50 5 -5 8
+-12 9 -15 0 -8 12 -43 27 -77 8 -17 14 -34 14 -38 0 -4 6 -21 14 -38 8 -18 42
+-106 76 -197 34 -91 70 -183 80 -205 9 -22 23 -57 30 -79 7 -21 30 -82 52
+-135 22 -53 41 -103 43 -111 2 -8 22 -62 45 -120 23 -58 50 -130 61 -160 11
+-30 24 -59 29 -64 6 -6 10 -19 10 -29 0 -10 7 -31 15 -45 22 -42 47 -125 38
+-131 -4 -3 -450 -4 -989 -1 l-982 5 24 60 c12 33 47 123 77 200 30 77 57 149
+62 160 4 11 9 25 10 30 3 11 60 157 74 190 5 11 24 58 41 105 18 47 39 100 47
+119 8 18 16 39 17 45 4 22 48 131 58 143 6 7 8 13 4 13 -4 0 0 13 9 30 8 16
+15 32 15 35 0 3 7 21 15 41 8 20 15 38 15 40 0 1 5 15 12 31 6 15 12 30 13 33
+5 20 20 61 35 95 9 22 33 83 53 135 20 52 56 147 81 210 95 244 300 780 322
+840 5 14 32 -36 49 -91z"/>
+<path d="M5910 8866 c0 -8 4 -17 9 -20 4 -3 14 -26 21 -51 7 -25 17 -45 21
+-45 5 0 9 -9 9 -20 0 -11 4 -28 9 -38 5 -9 17 -37 27 -62 10 -25 25 -63 34
+-85 39 -91 94 -241 92 -247 -1 -5 2 -8 8 -8 6 0 10 -6 10 -13 0 -12 18 -59 63
+-167 5 -14 11 -29 13 -35 1 -5 34 -89 74 -185 39 -96 73 -182 75 -190 2 -8 9
+-28 16 -45 7 -16 13 -32 14 -35 1 -3 6 -16 13 -30 6 -14 49 -124 97 -245 47
+-121 94 -240 104 -265 11 -25 36 -88 56 -140 54 -140 64 -166 83 -210 9 -22
+118 -298 219 -555 20 -49 41 -103 48 -120 7 -16 25 -61 40 -100 14 -38 30 -79
+35 -90 5 -11 19 -45 30 -75 12 -30 27 -66 33 -80 6 -14 11 -27 11 -30 1 -6 21
+-56 44 -110 49 -118 92 -235 92 -247 0 -7 5 -13 10 -13 6 0 10 -6 10 -12 0
+-13 49 -144 76 -203 7 -16 25 -61 40 -100 14 -38 29 -74 32 -80 4 -5 7 -17 9
+-25 1 -8 6 -23 12 -35 6 -11 74 -182 151 -380 78 -198 150 -379 161 -402 10
+-24 19 -46 19 -51 0 -5 9 -27 20 -50 11 -22 20 -48 20 -56 0 -8 4 -17 9 -20 5
+-3 12 -18 16 -33 3 -16 13 -41 20 -58 8 -16 43 -104 79 -195 35 -91 125 -319
+200 -508 75 -189 136 -345 136 -348 0 -2 9 -23 19 -47 10 -23 26 -62 36 -87
+20 -53 43 -108 56 -132 5 -10 9 -24 9 -31 0 -7 11 -37 25 -65 14 -29 25 -55
+25 -59 0 -8 37 -101 66 -170 8 -17 14 -33 14 -36 0 -2 8 -22 17 -43 9 -22 17
+-41 18 -44 1 -3 5 -14 10 -25 59 -146 175 -447 175 -455 0 -7 276 -10 800 -10
+l800 0 -19 48 c-10 26 -40 101 -66 167 -26 66 -55 138 -65 160 -9 22 -23 57
+-30 78 -7 22 -18 51 -26 65 -8 15 -14 31 -14 35 0 5 -6 23 -14 40 -22 49 -107
+261 -109 272 -4 16 -87 228 -98 247 -4 9 -32 77 -60 150 -28 73 -56 144 -61
+158 -6 14 -12 30 -13 35 -2 6 -12 32 -24 57 -11 25 -28 68 -37 94 -9 27 -24
+67 -34 89 -18 40 -32 76 -34 85 -3 12 -250 630 -267 667 -10 24 -19 49 -19 57
+0 8 -4 18 -10 21 -5 3 -10 13 -10 21 0 8 -9 33 -19 57 -11 23 -40 94 -64 157
+-116 296 -179 457 -187 475 -14 32 -59 145 -203 510 -73 187 -137 349 -142
+360 -5 11 -9 22 -10 25 -1 3 -6 16 -12 30 -6 14 -19 45 -28 70 -9 25 -21 54
+-25 65 -28 65 -161 403 -165 415 -2 8 -11 33 -21 55 -10 22 -18 42 -19 45 0 5
+-120 309 -135 345 -5 11 -19 45 -30 75 -34 86 -37 93 -54 132 -9 20 -16 38
+-16 41 0 3 -4 16 -9 29 -5 13 -9 25 -8 28 0 3 -10 23 -22 45 -11 22 -21 43
+-21 47 0 5 -46 122 -101 261 -56 138 -108 270 -116 291 -8 22 -17 45 -21 50
+-3 6 -7 18 -9 26 -1 8 -7 26 -14 40 -17 36 -25 55 -59 145 -17 44 -35 89 -40
+100 -4 11 -38 97 -75 190 -89 229 -155 396 -165 420 -5 11 -18 43 -28 70 -11
+28 -32 80 -47 118 l-27 67 -794 0 c-685 0 -794 -2 -794 -14z"/>
+</g>
+</svg>
+
+
+---
+./assets/orgs/google.svg
+---
+<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 0 24 24" width="24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/><path d="M1 1h22v22H1z" fill="none"/></svg>
+
+---
+./assets/orgs/moonshotai.svg
+---
+<svg fill="currentColor" fill-rule="evenodd" height="1em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg"><title>MoonshotAI</title><path d="M1.052 16.916l9.539 2.552a21.007 21.007 0 00.06 2.033l5.956 1.593a11.997 11.997 0 01-5.586.865l-.18-.016-.044-.004-.084-.009-.094-.01a11.605 11.605 0 01-.157-.02l-.107-.014-.11-.016a11.962 11.962 0 01-.32-.051l-.042-.008-.075-.013-.107-.02-.07-.015-.093-.019-.075-.016-.095-.02-.097-.023-.094-.022-.068-.017-.088-.022-.09-.024-.095-.025-.082-.023-.109-.03-.062-.02-.084-.025-.093-.028-.105-.034-.058-.019-.08-.026-.09-.031-.066-.024a6.293 6.293 0 01-.044-.015l-.068-.025-.101-.037-.057-.022-.08-.03-.087-.035-.088-.035-.079-.032-.095-.04-.063-.028-.063-.027a5.655 5.655 0 01-.041-.018l-.066-.03-.103-.047-.052-.024-.096-.046-.062-.03-.084-.04-.086-.044-.093-.047-.052-.027-.103-.055-.057-.03-.058-.032a6.49 6.49 0 01-.046-.026l-.094-.053-.06-.034-.051-.03-.072-.041-.082-.05-.093-.056-.052-.032-.084-.053-.061-.039-.079-.05-.07-.047-.053-.035a7.785 7.785 0 01-.054-.036l-.044-.03-.044-.03a6.066 6.066 0 01-.04-.028l-.057-.04-.076-.054-.069-.05-.074-.054-.056-.042-.076-.057-.076-.059-.086-.067-.045-.035-.064-.052-.074-.06-.089-.073-.046-.039-.046-.039a7.516 7.516 0 01-.043-.037l-.045-.04-.061-.053-.07-.062-.068-.06-.062-.058-.067-.062-.053-.05-.088-.084a13.28 13.28 0 01-.099-.097l-.029-.028-.041-.042-.069-.07-.05-.051-.05-.053a6.457 6.457 0 01-.168-.179l-.08-.088-.062-.07-.071-.08-.042-.049-.053-.062-.058-.068-.046-.056a7.175 7.175 0 01-.027-.033l-.045-.055-.066-.082-.041-.052-.05-.064-.02-.025a11.99 11.99 0 01-1.44-2.402zm-1.02-5.794l11.353 3.037a20.468 20.468 0 00-.469 2.011l10.817 2.894a12.076 12.076 0 01-1.845 2.005L.657 15.923l-.016-.046-.035-.104a11.965 11.965 0 01-.05-.153l-.007-.023a11.896 11.896 0 01-.207-.741l-.03-.126-.018-.08-.021-.097-.018-.081-.018-.09-.017-.084-.018-.094c-.026-.141-.05-.283-.071-.426l-.017-.118-.011-.083-.013-.102a12.01 12.01 0 01-.019-.161l-.005-.047a12.12 12.12 0 01-.034-2.145zm1.593-5.15l11.948 3.196c-.368.605-.705 1.231-1.01 1.875l11.295 3.022c-.142.82-.368 1.612-.668 2.365l-11.55-3.09L.124 10.26l.015-.1.008-.049.01-.067.015-.087.018-.098c.026-.148.056-.295.088-.442l.028-.124.02-.085.024-.097c.022-.09.045-.18.07-.268l.028-.102.023-.083.03-.1.025-.082.03-.096.026-.082.031-.095a11.896 11.896 0 011.01-2.232zm4.442-4.4L17.352 4.59a20.77 20.77 0 00-1.688 1.721l7.823 2.093c.267.852.442 1.744.513 2.665L2.106 5.213l.045-.065.027-.04.04-.055.046-.065.055-.076.054-.072.064-.086.05-.065.057-.073.055-.07.06-.074.055-.069.065-.077.054-.066.066-.077.053-.06.072-.082.053-.06.067-.074.054-.058.073-.078.058-.06.063-.067.168-.17.1-.098.059-.056.076-.071a12.084 12.084 0 012.272-1.677zM12.017 0h.097l.082.001.069.001.054.002.068.002.046.001.076.003.047.002.06.003.054.002.087.005.105.007.144.011.088.007.044.004.077.008.082.008.047.005.102.012.05.006.108.014.081.01.042.006.065.01.207.032.07.012.065.011.14.026.092.018.11.022.046.01.075.016.041.01L14.7.3l.042.01.065.015.049.012.071.017.096.024.112.03.113.03.113.032.05.015.07.02.078.024.073.023.05.016.05.016.076.025.099.033.102.036.048.017.064.023.093.034.11.041.116.045.1.04.047.02.06.024.041.018.063.026.04.018.057.025.11.048.1.046.074.035.075.036.06.028.092.046.091.045.102.052.053.028.049.026.046.024.06.033.041.022.052.029.088.05.106.06.087.051.057.034.053.032.096.059.088.055.098.062.036.024.064.041.084.056.04.027.062.042.062.043.023.017c.054.037.108.075.161.114l.083.06.065.048.056.043.086.065.082.064.04.03.05.041.086.069.079.065.085.071c.712.6 1.353 1.283 1.909 2.031L7.222.994l.062-.027.065-.028.081-.034.086-.035c.113-.045.227-.09.341-.131l.096-.035.093-.033.084-.03.096-.031c.087-.03.176-.058.264-.085l.091-.027.086-.025.102-.03.085-.023.1-.026L9.04.37l.09-.023.091-.022.095-.022.09-.02.098-.021.091-.02.095-.018.092-.018.1-.018.091-.016.098-.017.092-.014.097-.015.092-.013.102-.013.091-.012.105-.012.09-.01.105-.01c.093-.01.186-.018.28-.024l.106-.008.09-.005.11-.006.093-.004.1-.004.097-.002.099-.002.197-.002z"></path></svg>
+
+---
+./assets/orgs/nvidia.svg
+---
+<svg viewBox="0 0 271.7 179.7" xmlns="http://www.w3.org/2000/svg" width="2500" height="1653"><path d="M101.3 53.6V37.4c1.6-.1 3.2-.2 4.8-.2 44.4-1.4 73.5 38.2 73.5 38.2S148.2 119 114.5 119c-4.5 0-8.9-.7-13.1-2.1V67.7c17.3 2.1 20.8 9.7 31.1 27l23.1-19.4s-16.9-22.1-45.3-22.1c-3-.1-6 .1-9 .4m0-53.6v24.2l4.8-.3c61.7-2.1 102 50.6 102 50.6s-46.2 56.2-94.3 56.2c-4.2 0-8.3-.4-12.4-1.1v15c3.4.4 6.9.7 10.3.7 44.8 0 77.2-22.9 108.6-49.9 5.2 4.2 26.5 14.3 30.9 18.7-29.8 25-99.3 45.1-138.7 45.1-3.8 0-7.4-.2-11-.6v21.1h170.2V0H101.3zm0 116.9v12.8c-41.4-7.4-52.9-50.5-52.9-50.5s19.9-22 52.9-25.6v14h-.1c-17.3-2.1-30.9 14.1-30.9 14.1s7.7 27.3 31 35.2M27.8 77.4s24.5-36.2 73.6-40V24.2C47 28.6 0 74.6 0 74.6s26.6 77 101.3 84v-14c-54.8-6.8-73.5-67.2-73.5-67.2z" fill="#76b900"/></svg>
+
+---
+./assets/orgs/openai.svg
+---
+<?xml version="1.0" encoding="utf-8"?><!-- Uploaded to: SVG Repo, www.svgrepo.com, Generator: SVG Repo Mixer Tools -->
+<svg fill="#000000" width="800px" height="800px" viewBox="0 0 24 24" role="img" xmlns="http://www.w3.org/2000/svg"><title>OpenAI icon</title><path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"/></svg>
+
+---
+./assets/orgs/xai.svg
+---
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="22.8135 13.0668 438.67 481.45" width="438.67px" height="481.45px">
+  <g transform="matrix(0.919568, 0, 0, 0.919568, -148.294373, -24.181868)" style="">
+    <polygon points="557.09,211.99 565.4,538.36 631.96,538.36 640.28,93.18 &#9;"/>
+    <polygon points="640.28,56.91 538.72,56.91 379.35,284.53 430.13,357.05 &#9;"/>
+    <polygon points="201.61,538.36 303.17,538.36 353.96,465.84 303.17,393.31 &#9;"/>
+    <polygon points="201.61,211.99 430.13,538.36 531.69,538.36 303.17,211.99 &#9;"/>
+  </g>
+</svg>
+
+---
+./assets/orgs/zai-org.svg
+---
+<svg fill="currentColor" fill-rule="evenodd" height="1em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg"><title>Z.ai</title><path d="M12.105 2L9.927 4.953H.653L2.83 2h9.276zM23.254 19.048L21.078 22h-9.242l2.174-2.952h9.244zM24 2L9.264 22H0L14.736 2H24z"></path></svg>
+
+---
+./src/__init__.py
+---
+
+
+---
+./src/data.py
+---
+import pandas as pd
+
+def load_mock_data():
+    models = pd.DataFrame([
+        {'Country': '🇺🇸', 'Organization': 'Google', 'Model': 'GPT-4V', 'License': 'Proprietary', 'Parameters (B)': 175, 'Context': '128K', 'Input $/M': 0.01, 'Output $/M': 0.03, 'Knowledge Cutoff': '2023-04'},
+        {'Country': '🇺🇸', 'Organization': 'Anthropic', 'Model': 'Claude-3 Opus', 'License': 'Proprietary', 'Parameters (B)': None, 'Context': '200K', 'Input $/M': 0.015, 'Output $/M': 0.075, 'Knowledge Cutoff': '2023-12'},
+        {'Country': '🇫🇷', 'Organization': 'Mistral', 'Model': 'Llama-3 70B', 'License': 'Open Source', 'Parameters (B)': 70, 'Context': '8K', 'Input $/M': 0.0008, 'Output $/M': 0.0008, 'Knowledge Cutoff': '2023-03'},
+    ])
+
+    benchmarks = pd.DataFrame([
+        {'id': 1, 'title': 'Web Vuln 1', 'statement': 'Find the flag in the web page.', 'assets': 'image.png', 'category': 'Web', 'difficulty': 'Easy', 'expected_flag': 'flag{...}', 'scorer': 'exact_match'},
+        {'id': 2, 'title': 'Pwn Buffer', 'statement': 'Exploit the buffer overflow.', 'assets': 'binary', 'category': 'Pwn', 'difficulty': 'Medium', 'expected_flag': 'flag{...}', 'scorer': 'exact_match'},
+        {'id': 3, 'title': 'Crypto RSA', 'statement': 'Decrypt the message.', 'assets': 'crypto.txt', 'category': 'Crypto', 'difficulty': 'Hard', 'expected_flag': 'flag{...}', 'scorer': 'exact_match'},
+    ])
+
+    environments = pd.DataFrame([
+        {'id': 1, 'name': 'Kali Linux', 'image/tag': 'kalilinux/kali-rolling:latest', 'tools': 'pwntools, nmap', 'limits': '2 CPU, 4GB RAM', 'digest': 'sha256:...'},
+        {'id': 2, 'name': 'Headless Browser', 'image/tag': 'browserless/chrome:latest', 'tools': 'selenium', 'limits': '1 CPU, 2GB RAM', 'digest': 'sha256:...'},
+    ])
+
+    runs = pd.DataFrame([
+        {'id': 1, 'problem_id': 1, 'environment_id': 2, 'model_id': 1, 'params': {'temp': 0.5}, 'status': 'succeeded', 'metrics': [{'solved': True, 'ttf': 120, 'tokens': 1500, 'cost': 0.015}], 'artifacts': 'log.txt', 'logs': '...', 'flag_found': 'flag{...}', 'timestamps': '...', 'success_rate': 85},
+        {'id': 2, 'problem_id': 2, 'environment_id': 1, 'model_id': 3, 'params': {'temp': 0.7}, 'status': 'failed', 'metrics': [{'solved': False, 'ttf': None, 'tokens': 3000, 'cost': 0.0024}], 'artifacts': 'log.txt', 'logs': '...', 'flag_found': None, 'timestamps': '...', 'success_rate': 60},
+        {'id': 3, 'problem_id': 1, 'environment_id': 1, 'model_id': 3, 'params': {'temp': 0.6}, 'status': 'succeeded', 'metrics': [{'solved': True, 'ttf': 100, 'tokens': 1000, 'cost': 0.001}], 'artifacts': 'log.txt', 'logs': '...', 'flag_found': 'flag{...}', 'timestamps': '...', 'success_rate': 75},
+    ])
+    
+    return models, benchmarks, environments, runs
+
+def load_queue_data():
+    running_jobs = pd.DataFrame({
+        'Job ID': ['J-84B12', 'J-92C8F', 'J-A1D05'],
+        'User': ['Alice', 'Bob', 'Charlie'],
+        'Model': ['GPT-4o', 'Claude 3 Opus', 'Llama 3 70B'],
+        'Benchmark': ['Code-Gen-Python', 'Doc-Q&A', 'Creative-Writing'],
+        'Started': ['8m ago', '3m ago', '1m ago']
+    })
+    queued_jobs = pd.DataFrame({
+        'Position': [1],
+        'User': ['David'],
+        'Model': ['Gemini 1.5 Pro'],
+        'Benchmark': ['Code-Gen-Python']
+    })
+    return running_jobs, queued_jobs
+
+---
+./src/data_benchmark.py
+---
+import pandas as pd
+
+def load_benchmarks():
+    """Loads the benchmark data."""
+    data = [
+        {"Model": "Llama 2 7B", "Benchmark": "HumanEval", "Accuracy @ 20 pass": 0.8},
+        {"Model": "Llama 2 7B", "Benchmark": "MMLU", "Accuracy @ 20 pass": 0.75},
+        {"Model": "Code Llama 7B", "Benchmark": "HumanEval", "Accuracy @ 20 pass": 0.85},
+        {"Model": "Code Llama 13B", "Benchmark": "MMLU", "Accuracy @ 20 pass": 0.9},
+    ]
+    return pd.DataFrame(data)
+
+
+---
+./src/ui.py
+---
+import streamlit as st
+import base64
+import streamlit.components.v1 as components
+from src.utils import get_image_as_base64
+
+def render_navbar_and_styles():
+    logo_base64 = get_image_as_base64("assets/logo-cropped.png")
+    github_base64 = get_image_as_base64("assets/github-mark.svg")
+
+    components.html("""
+    <script>
+    // ROBUST NAVIGATION SYSTEM FOR STREAMLIT - V10 (CLEANED)
+
+    // --- CONFIGURATION ---
+    const sections = ['home', 'models', 'benchmarks', 'compare', 'ctf', 'about', 'thesis'];
+    const navbarHeight = 80;
+
+    // --- STATE ---
+    let currentActiveSection = 'home';
+    let scrollContainer = null;
+    let intersectionObserver = null;
+    let isInitialized = false;
+    let initObserver = null;
+    let isScrollingProgrammatically = false;
+    let scrollTimeout = null;
+
+    // --- CORE, IFRAME-AWARE FUNCTIONS ---
+
+    function findScrollContainer() {
+        const parentDoc = window.parent.document;
+        const candidate = parentDoc.querySelector('[data-testid="stAppViewContainer"]');
+        if (candidate && candidate.scrollHeight > candidate.clientHeight) {
+            return candidate;
+        }
+        return window.parent;
+    }
+
+    function setActiveNav(sectionId) {
+        if (!sectionId || currentActiveSection === sectionId) {
+            return;
+        }
+        currentActiveSection = sectionId;
+        window.parent.document.querySelectorAll('.nav-link').forEach(link => {
+            const href = link.getAttribute('href');
+            const linkSectionId = href ? href.substring(1) : '';
+            link.classList.toggle('active', linkSectionId === sectionId);
+        });
+    }
+
+    function scrollToSection(sectionId) {
+        const anchor = window.parent.document.getElementById(sectionId);
+        if (!anchor) {
+            console.error('NAV | Could not find anchor for section:', sectionId);
+            return;
+        }
+
+        isScrollingProgrammatically = true;
+        setActiveNav(sectionId);
+
+        anchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        if (window.parent.history.pushState) {
+            window.parent.history.pushState(null, null, '#' + sectionId);
+        }
+
+        clearTimeout(scrollTimeout);
+        scrollTimeout = setTimeout(() => {
+            isScrollingProgrammatically = false;
+        }, 1000);
+    }
+
+    // --- SETUP FUNCTIONS (IFRAME-AWARE) ---
+
+    function setupClickHandlers() {
+        window.parent.document.querySelectorAll('.nav-link').forEach(link => {
+            const newLink = link.cloneNode(true);
+            link.parentNode.replaceChild(newLink, link);
+            newLink.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                const sectionId = newLink.getAttribute('href').substring(1);
+                scrollToSection(sectionId);
+            });
+        });
+    }
+
+    function setupIntersectionObserver() {
+        if (intersectionObserver) intersectionObserver.disconnect();
+
+        scrollContainer = findScrollContainer();
+        const rootMargin = `-${navbarHeight}px 0px -50% 0px`;
+
+        intersectionObserver = new IntersectionObserver((entries) => {
+            if (isScrollingProgrammatically) {
+                return;
+            }
+            let mostVisibleSection = null;
+            let maxRatio = 0;
+            entries.forEach(entry => {
+                if (entry.isIntersecting && entry.intersectionRatio > maxRatio) {
+                    mostVisibleSection = entry.target.dataset.sectionId;
+                    maxRatio = entry.intersectionRatio;
+                }
+            });
+            if (mostVisibleSection) {
+                setActiveNav(mostVisibleSection);
+            }
+        }, {
+            root: scrollContainer === window.parent ? null : scrollContainer,
+            rootMargin: rootMargin,
+            threshold: 0.1
+        });
+
+        sections.forEach(id => {
+            const anchor = window.parent.document.getElementById(id);
+            if (anchor && anchor.parentElement) {
+                const elementToObserve = anchor.parentElement;
+                elementToObserve.dataset.sectionId = id;
+                intersectionObserver.observe(elementToObserve);
+            } else {
+                console.warn('NAV | Could not find parent element to observe for section:', id);
+            }
+        });
+    }
+
+    function setupThemeToggle() {
+        const toggleBtn = window.parent.document.querySelector('.theme-toggle');
+        if (toggleBtn && !toggleBtn.dataset.listenerAttached) {
+            toggleBtn.addEventListener('click', () => {
+                window.parent.document.body.classList.toggle('dark-mode');
+            });
+            toggleBtn.dataset.listenerAttached = 'true';
+        }
+    }
+
+    // --- INITIALIZATION LOGIC (IFRAME-AWARE) ---
+
+    function finalInitialization() {
+        if (isInitialized) return;
+        isInitialized = true;
+
+        if (initObserver) {
+            initObserver.disconnect();
+        }
+
+        setupClickHandlers();
+        setupIntersectionObserver();
+        setupThemeToggle();
+        
+        const initialHash = window.parent.location.hash.substring(1);
+        if (initialHash && sections.includes(initialHash)) {
+            setTimeout(() => {
+                scrollToSection(initialHash);
+            }, 500);
+        } else {
+            setActiveNav('home');
+        }
+    }
+
+    function attemptInitialization() {
+        if (isInitialized) return;
+
+        const parentDoc = window.parent.document;
+        const navbar = parentDoc.querySelector('.navbar');
+        const navLinks = parentDoc.querySelectorAll('.nav-link');
+        const sectionAnchors = sections.every(id => parentDoc.getElementById(id));
+
+        if (navbar && navLinks.length > 0 && sectionAnchors) {
+            finalInitialization();
+        } 
+    }
+
+    function setupInitializationObserver() {
+        if (initObserver) initObserver.disconnect();
+
+        initObserver = new MutationObserver(() => {
+            if (!isInitialized) {
+                clearTimeout(window.navReinitTimeout);
+                window.navReinitTimeout = setTimeout(attemptInitialization, 250);
+            }
+        });
+
+        initObserver.observe(window.parent.document.body, {
+            childList: true,
+            subtree: true
+        });
+    }
+
+    // --- GLOBAL API & STARTUP ---
+    window.parent.scrollToSection = scrollToSection;
+
+    function onDomReady() {
+        if (window.parent.document.readyState === 'loading') {
+            window.parent.addEventListener('DOMContentLoaded', onDomReady);
+        } else {
+            setupInitializationObserver();
+            attemptInitialization();
+        }
+    }
+
+    onDomReady();
+
+    </script>
+    """, height=0)
+
+    st.markdown("""
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    """, unsafe_allow_html=True)
+
+    st.markdown("""
+    <style>
+        /* Bulletproof navigation highlighting */
+        * {font-family: 'Roboto', sans-serif !important;}
+        
+        /* Core navbar styles */
+        body {
+            margin: 0 !important;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        
+        /* Dark mode styles */
+        body.dark-mode {
+            background-color: #121212 !important;
+            color: #ffffff !important;
+        }
+        body.dark-mode .stAppViewContainer,
+        body.dark-mode [data-testid="stAppViewContainer"] {
+            background-color: #121212 !important;
+            color: #ffffff !important;
+        }
+        body.dark-mode .stMarkdown,
+        body.dark-mode .stMarkdown > * {
+            color: #ffffff !important;
+        }
+        body.dark-mode .navbar {
+            background-color: #1e1e1e !important;
+        }
+        body.dark-mode .nav-link {
+            color: #ffffff !important;
+        }
+        body.dark-mode .nav-link:hover {
+            background-color: #333 !important;
+            color: #840132 !important;
+        }
+        body.dark-mode .nav-link.active {
+            background-color: #840132 !important;
+            color: #ffffff !important;
+        }
+        
+        /* Navbar container */
+        .stAppViewContainer {
+            padding-top: 80px !important;
+        }
+        .navbar {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            z-index: 1000 !important;
+            background-color: #ffffff !important;
+            padding: 10px 20px !important;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+            display: flex !important;
+            justify-content: space-between !important;
+            align-items: center !important;
+            gap: 20px !important;
+            height: 70px !important;
+        }
+        
+        /* Logo section */
+        .navbar-left {
+            display: flex !important;
+            align-items: center !important;
+            height: 100% !important;
+        }
+        .navbar-logo {
+            height: 40px !important;
+            margin-left: 20% !important;
+            width: auto !important;
+            object-fit: contain !important;
+        }
+        .navbar-logo-text {
+            color: #840132 !important;
+            font-weight: bold !important;
+            font-size: 20px !important;
+            margin-left: 10px !important;
+            text-decoration: none !important;
+        }
+        .navbar-left a {
+            display: flex !important;
+            align-items: center !important;
+            text-decoration: none !important;
+            background-color: transparent !important;
+        }
+        
+        /* Navigation center */
+        .navbar-center {
+            display: flex !important;
+            justify-content: center !important;
+            gap: 30px !important;
+            flex: 1 !important;
+        }
+        
+        /* Navigation links - base styles */
+        .nav-link {
+            color: #333 !important;
+            text-decoration: none !important;
+            font-weight: 500 !important;
+            padding: 8px 16px !important;
+            border-radius: 4px !important;
+            transition: all 0.2s !important;
+            position: relative !important;
+            display: inline-block !important;
+            line-height: 1.4 !important;
+            background-color: transparent !important;
+            border: none !important;
+            margin: 0 !important;
+            cursor: pointer !important;
+        }
+        
+        .nav-link:hover {
+            background-color: #f0f0f0 !important;
+            color: #840132 !important;
+        }
+        
+        /* Active state for nav links */
+        .nav-link.active {
+            background-color: #840132 !important;
+            color: #ffffff !important;
+        }
+        
+        /* Dark mode nav links */
+        body.dark-mode .nav-link {
+            color: #ffffff !important;
+        }
+        body.dark-mode .nav-link:hover {
+            background-color: #333 !important;
+            color: #840132 !important;
+        }
+        body.dark-mode .nav-link.active {
+            background-color: #840132 !important;
+            color: #ffffff !important;
+        }
+        
+        /* Right side */
+        .navbar-right {
+            display: flex !important;
+            align-items: center !important;
+            gap: 20px !important;
+        }
+        .github-link {
+            color: #333 !important;
+            text-decoration: none !important;
+            padding: 8px 12px !important;
+            border-radius: 4px !important;
+            transition: all 0.2s !important;
+            display: flex !important;
+            align-items: center !important;
+        }
+        .github-link:hover {
+            background-color: #f0f0f0 !important;
+            color: #840132 !important;
+        }
+        .github-icon {
+            width: 24px !important;
+            height: 24px !important;
+            vertical-align: middle !important;
+            margin-right: 4px !important;
+        }
+        .theme-toggle {
+            background: none !important;
+            border: none !important;
+            font-size: 20px !important;
+            cursor: pointer !important;
+            padding: 8px !important;
+            border-radius: 4px !important;
+            transition: all 0.2s !important;
+            color: #333 !important;
+        }
+        .theme-toggle:hover {
+            background-color: #f0f0f0 !important;
+            color: #840132 !important;
+        }
+        
+        /* Dark mode right side */
+        body.dark-mode .github-link {
+            color: #ffffff !important;
+        }
+        body.dark-mode .github-link:hover {
+            background-color: #333 !important;
+            color: #840132 !important;
+        }
+        body.dark-mode .theme-toggle {
+            color: #ffffff !important;
+        }
+        body.dark-mode .theme-toggle:hover {
+            background-color: #333 !important;
+            color: #840132 !important;
+        }
+        
+        /* Streamlit component fixes */
+        body.dark-mode .stMetric > div > div {
+            color: #ffffff !important;
+        }
+        body.dark-mode .stDataFrame {
+            background-color: #1e1e1e !important;
+        }
+        body.dark-mode .stDataFrame th, 
+        body.dark-mode .stDataFrame td {
+            color: #ffffff !important;
+            border-color: #333 !important;
+        }
+        
+        /* Hide Streamlit header */
+        .stAppHeader.st-emotion-cache-1ffuo7c.e3g0k5y1 {
+            display: none !important;
+        }
+        
+        /* Block container fixes */
+        .block-container {
+            padding-top: 0rem !important;
+            color: inherit !important;
+        }
+
+        .section-anchor {
+            display: block;
+            position: relative;
+            top: -100px; /* Adjust this value to be slightly more than your navbar height */
+            visibility: hidden;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    st.markdown(f"""
+    <div class="navbar">
+        <div class="navbar-left">
+            <a href="#home">
+                <img src="data:image/png;base64,{logo_base64}" alt="Logo" class="navbar-logo">
+                <span class="navbar-logo-text">aubctf.com</span>
+            </a>
+        </div>
+        <div class="navbar-center">
+            <a href="#home" class="nav-link">Home</a>
+            <a href="#models" class="nav-link">Models</a>
+            <a href="#benchmarks" class="nav-link">Benchmarks</a>
+            <a href="#compare" class="nav-link">Compare</a>
+            <a href="#ctf" class="nav-link">CTF</a>
+            <a href="#about" class="nav-link">About</a>
+            <a href="#thesis" class="nav-link">Thesis</a>
+        </div>
+        <div class="navbar-right">
+            <a href="https://github.com" class="github-link" target="_blank" title="GitHub">
+                <img src="data:image/svg+xml;base64,{github_base64}" alt="GitHub" class="github-icon">
+            </a>
+            <button class="theme-toggle" onclick="toggleTheme()" title="Toggle Theme">🌙</button>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+---
+./src/utils.py
+---
+import base64
+def get_image_as_base64(path):
+    with open(path, "rb") as f:
+        data = f.read()
+    return base64.b64encode(data).decode()
+
+
+---
+./src/views/__init__.py
+---
+
+
+---
+./src/views/compare.py
+---
+import streamlit as st
+import pandas as pd
+
+def render(models: pd.DataFrame):
+    st.markdown('<div id="compare" class="section-anchor"></div>', unsafe_allow_html=True)
+    st.header("Compare")
+    st.write("Side-by-side analysis of models and environments.")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        model1 = st.selectbox("Select Model 1", models['Model'], key="model1")
+    with col2:
+        model2 = st.selectbox("Select Model 2", models['Model'], key="model2")
+    
+    if st.button("Compare"):
+        st.write(f"Comparing {model1} and {model2}...")
+
+---
+./src/views/ctf.py
+---
+import streamlit as st
+import pandas as pd
+
+def render(problems: pd.DataFrame, models: pd.DataFrame, environments: pd.DataFrame):
+    st.markdown('<div id="ctf" class="section-anchor"></div>', unsafe_allow_html=True)
+    st.header("CTF")
+    tab1, tab2 = st.tabs(["New Evaluation", "Queue / Active Jobs"])
+    with tab1:
+        st.subheader("New Evaluation Wizard")
+        st.write("A multi-step form to create a new run will be here.")
+    with tab2:
+        st.subheader("Queue / Active Jobs")
+        st.write("Operational view of runs.")
+
+---
+./src/views/docs.py
+---
+import streamlit as st
+
+def render():
+    st.markdown('<div id="docs" class="section-anchor"></div>', unsafe_allow_html=True)
+    st.header("Docs, About, & Thesis")
+    st.write("This section will contain documentation, information about the team, and the thesis.")
+
+---
+./src/views/home.py
+---
+import streamlit as st
+from src.utils import get_image_as_base64
+def render(models): # The function signature must match the call in main.py
+    st.markdown('<div id="home" class="section-anchor"></div>', unsafe_allow_html=True)
+
+    logo = get_image_as_base64("assets/logo.png")
+    # Apply max-width directly to the image using markdown
+    st.markdown(f"""
+    <div style="text-align: center;margin-top:80px">
+        <img src="data:image/png;base64,{logo}" alt="Logo" style="max-width: 12%; height: auto; margin: 0 auto;">
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Combined Title
+    st.markdown("""
+    <h1 style="text-align: center; font-size: 2rem; font-weight: 700; margin-top: 20px;">
+        AUB-CTF-Bench: Bridging the Vision Gap
+    </h1>
+    """, unsafe_allow_html=True)
+
+    # Subtitle
+    st.markdown("""
+    <p style="text-align: center; font-size: 1.2rem; color: #888;">
+        Benchmarking Large Language Models on Multi-Modal Capture The Flag Problems
+    </p>
+    """, unsafe_allow_html=True)
+
+
+
+
+---
+./src/views/manage.py
+---
+import streamlit as st
+import pandas as pd
+
+def render(environments: pd.DataFrame):
+    st.markdown('<div id="manage" class="section-anchor"></div>', unsafe_allow_html=True)
+    st.header("Manage")
+    tab1, tab2, tab3 = st.tabs(["Environments", "Artifacts", "Admin"])
+    with tab1:
+        st.subheader("Environments")
+        st.dataframe(environments)
+    with tab2:
+        st.subheader("Artifacts")
+        st.write("A searchable store of run outputs will be here.")
+    with tab3:
+        st.subheader("Admin")
+        st.write("Project-level configuration will be here.")
+
+
+
+
+---
+./src/views/models.py
+---
+import streamlit as st
+import pandas as pd
+
+def render(models: pd.DataFrame, benchmarks: pd.DataFrame, runs: pd.DataFrame):
+    st.markdown('<div id="models" class="section-anchor"></div>', unsafe_allow_html=True)
+    st.header("Model Hub")
+    st.write("Pick what to run with; manage configs.")
+ 
+    # Custom CSS for shadcn/ui feel
+    st.markdown("""
+    <style>
+        [data-testid="stDataFrame"] {
+            border: none;
+        }
+        [data-testid="stDataFrame"] thead th {
+            background-color: #fafafa;
+            border-bottom: 1px solid #d0d0d0;
+            font-size: 14px;
+            font-weight: 600;
+            padding: 12px 16px;
+        }
+        [data-testid="stDataFrame"] tbody tr {
+            border-bottom: 1px solid #f0f0f0;
+        }
+        [data-testid="stDataFrame"] tbody td {
+            padding: 12px 16px;
+            font-size: 14px;
+            vertical-align: middle;
+        }
+        [data-testid="stDataFrameColumnMenu"] div[role="menuitem"] {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            line-height: 1.5;
+            min-height: 32px;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+ 
+    # Merge data to get benchmark results
+    merged_data = pd.merge(runs, benchmarks, left_on='problem_id', right_on='id')
+     
+    # Assign model names to runs
+    model_id_to_name = models.set_index('Model').reset_index().reset_index().set_index('index')['Model']
+    merged_data['Model'] = merged_data['model_id'].map(model_id_to_name)
+ 
+    # Pivot to get benchmarks as columns
+    pivot_df = merged_data.pivot_table(index='Model', columns='title', values='success_rate').reset_index()
+ 
+    # Merge with models dataframe
+    models_with_benchmarks = pd.merge(models, pivot_df, on='Model', how='left')
+ 
+    # Allow user to select benchmarks
+    all_benchmarks = benchmarks['title'].tolist()
+    selected_benchmarks = st.multiselect("Select benchmarks to display:", all_benchmarks, default=all_benchmarks[:2])
+ 
+    # Filter columns to display
+    base_columns = ['Organization', 'Model', 'License', 'Parameters (B)', 'Context', 'Input $/M', 'Output $/M', 'Knowledge Cutoff']
+    columns_to_show = base_columns + selected_benchmarks
+     
+    # Ensure selected benchmark columns exist, fill missing with NaN
+    for bench in selected_benchmarks:
+        if bench not in models_with_benchmarks.columns:
+            models_with_benchmarks[bench] = pd.NA
+ 
+    models_display = models_with_benchmarks[columns_to_show].copy()
+     
+    # Display interactive dataframe
+    st.dataframe(
+        models_display,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Organization": st.column_config.TextColumn("Organization"),
+            "Input $/M": st.column_config.TextColumn("Input $/M"),
+            "Output $/M": st.column_config.TextColumn("Output $/M"),
+            "Context": st.column_config.NumberColumn("Context", format="%.0f"),
+            **{bench: st.column_config.NumberColumn(bench, format="%.1f%%") for bench in selected_benchmarks}
+        }
+    )
+ 
+   
+    st.subheader("Add Benchmark to Model")
+    col1, col2, col3 = st.columns([2,2,1])
+    with col1:
+        selected_model = st.selectbox("Select a Model", models['Model'].tolist(), key="add_benchmark_model")
+    with col2:
+        # Logic to disable benchmarks that are already run
+        model_runs = merged_data[merged_data['Model'] == selected_model]['title'].tolist()
+        available_benchmarks = benchmarks['title'].tolist()
+         
+        def format_benchmark_option(bench_name):
+            return f"{{bench_name}} {{'(completed)' if bench_name in model_runs else ''}}"
+ 
+        selected_benchmark_formatted = st.selectbox(
+            "Select a Benchmark", 
+            available_benchmarks, 
+            key="add_benchmark_name",
+            format_func=format_benchmark_option
+        )
+    with col3:
+        st.button("Add Benchmark", use_container_width=True, key="add_benchmark_button")
+
+
+---
+./src/views/problems_results.py
+---
+import streamlit as st
+import pandas as pd
+
+def render(problems: pd.DataFrame, runs: pd.DataFrame):
+    st.markdown('<div id="problems_results" class="section-anchor"></div>', unsafe_allow_html=True)
+    st.header("Problems & Results")
+    tab1, tab2, tab3 = st.tabs(["Problem Library", "Results & Analytics", "Leaderboards"])
+    with tab1:
+        st.subheader("Problem Library")
+        st.dataframe(problems)
+    with tab2:
+        st.subheader("Results & Analytics")
+        st.write("Charts and data export will be here.")
+        st.dataframe(runs)
+    with tab3:
+        st.subheader("Leaderboards")
+        st.write("Rankings for models and problems will be here.")
+
+---
